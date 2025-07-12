@@ -1,0 +1,85 @@
+# =============================================================================
+# Python Virtual Environments
+# =============================================================================
+# Never commit your virtual environment. It's specific to your machine and
+# can be recreated by others using pip.
+venv/
+.venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# =============================================================================
+# Python Cache and Compiled Files
+# =============================================================================
+# These are generated automatically by Python to speed up execution.
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =C extensions
+*.so
+
+# =============================================================================
+# Build and Distribution Artifacts
+# =============================================================================
+# These are for deploying to PyPI, not for source control.
+build/
+dist/
+*.egg-info/
+*.egg
+sdist/
+wheels/
+pip-wheel-metadata/
+
+# =============================================================================
+# Example Script Outputs & Logs
+# =============================================================================
+# This is the key section that ignores your output folders using wildcards.
+*-output/
+*-adapter/
+*-merged/
+*.log
+pip-log.txt
+
+# =============================================================================
+# Hugging Face Cache & Models
+# =============================================================================
+# In case a model downloads to the local directory (it shouldn't with default
+# settings, but this is a safeguard).
+# The model name you used was "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+tinyllama-1.1b-chat-v1.0/
+TinyLlama-1.1B-Chat-v1.0/
+tinylama-1.1b-eigentuned-output/
+tinylama-1.1b-eigentuned-adapter/
+dolly-eigentuned-adapter/
+dolly-eigentuned-output/
+
+# A more generic rule for any Hugging Face model folder.
+# This is a bit aggressive but very safe.
+# Uncomment if you want to be extra cautious.
+# [Tt]iny[Ll]lama*/
+
+# =============================================================================
+# IDE and OS-specific files
+# =================================================_
+# These are specific to your development environment and OS.
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
+
+# =============================================================================
+# Unit Test / Coverage Reports
+# =============================================================================
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/

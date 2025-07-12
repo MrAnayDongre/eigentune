@@ -1,0 +1,27 @@
+[project]
+name = "eigentune"
+version = "0.1.0"
+authors = [
+  { name="MrAnayDongre", email="dongreana@gmail.com" },
+]
+description = "EigenTune: An extremely parameter-efficient fine-tuning method via singular value scaling."
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "peft>=0.8.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/MrAnayDongre/eigentune"
+"Bug Tracker" = "https://github.com/MrAnayDongre/eigentune/issues"
