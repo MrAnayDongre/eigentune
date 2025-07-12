@@ -1,6 +1,6 @@
 # EigenTune: Surgical Fine-Tuning via Singular Value Scaling
 
-[![PyPI version](https://badge.fury.io/py/eigentune.svg)](https://badge.fury.io/py/eigentune)
+[![PyPI version](https://badge.fury.io/py/eigentune.svg)](https://pypi.org/project/eigentune/0.1.0/#description)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/MrAnayDongre/eigentune/blob/main/LICENSE)
 
 EigenTune is a novel Parameter-Efficient Fine-Tuning (PEFT) method inspired by the mathematical properties of model weights. Instead of adding new matrices like LoRA, EigenTune identifies the most important "feature directions" in existing weight matrices (via SVD) and only fine-tunes their magnitudes.
