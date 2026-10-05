@@ -19,7 +19,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["torch>=2.1", "safetensors>=0.4"]
+dependencies = ["torch>=2.1", "numpy>=1.21", "safetensors>=0.4"]  # safetensors.torch imports numpy when saving
 
 [project.optional-dependencies]
 triton = ["triton>=3.0"]
