@@ -25,5 +25,5 @@ class _EigenTuneFunction(torch.autograd.Function):
 
 
 def eigentune_update(x, base_out, Vh, U, w, kind, backend="auto"):
-    """``base_out + (scale(x @ Vh.T)) @ U.T`` for 2-D ``x``/``base_out``; differentiable in ``x``, ``base_out``, ``w``."""
+    """``base_out + scale(x @ Vh.T) @ U.T`` on 2-D ``x``/``base_out``; differentiable in ``x``, ``base_out``, ``w``."""
     return _EigenTuneFunction.apply(x, base_out, Vh, U, w, kind, backend)

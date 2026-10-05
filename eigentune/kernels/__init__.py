@@ -17,3 +17,10 @@ __all__ = ["Backend", "available_backends", "get_backend", "register_backend", "
 from .reference import TorchBackend as _TorchBackend
 
 register_backend(_TorchBackend())
+
+try:  # the Triton backend is optional: CPU-only installs never import it
+    from .triton_backend import TritonBackend as _TritonBackend
+
+    register_backend(_TritonBackend())
+except ImportError:
+    pass
