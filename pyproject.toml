@@ -24,7 +24,7 @@ dependencies = ["torch>=2.1", "safetensors>=0.4"]
 [project.optional-dependencies]
 triton = ["triton>=3.0"]
 transformers = ["transformers>=4.40"]
-dev = ["pytest>=7", "ruff", "build", "twine", "transformers>=4.40"]
+dev = ["pytest>=7", "ruff", "build", "twine", "transformers>=4.40", "accelerate"]
 
 [project.urls]
 Homepage = "https://github.com/MrAnayDongre/eigentune"

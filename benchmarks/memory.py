@@ -20,7 +20,6 @@ from _common import metadata, save  # noqa: E402
 
 from eigentune import EigenTuneConfig, get_eigentune_model  # noqa: E402
 
-
 KINDS = ("frozen", "eigentune_diag", "eigentune_core", "lora", "lora_bf16", "dora")
 
 

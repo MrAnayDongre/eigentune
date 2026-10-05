@@ -21,6 +21,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import metadata  # noqa: E402
 from _methods import ALL, build  # noqa: E402
+from _thermal import governor  # noqa: E402
 
 MODEL = "Qwen/Qwen3-0.6B"
 SEQ = 192
@@ -97,6 +98,7 @@ def run(method, rank, lr, seed, steps):
     curve, losses, tokens, t_train = [(0, evaluate(model, test, pad, 128))], [], 0, 0.0
     cursor = 0
     for step in range(1, steps + 1):
+        governor()  # pause (GPU idle) if the shared CPU/GPU thermal envelope is exceeded
         torch.cuda.synchronize()
         t0 = time.perf_counter()
         for _ in range(ACCUM):
