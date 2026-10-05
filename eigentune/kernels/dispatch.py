@@ -39,8 +39,12 @@ def available_backends() -> List[str]:
 
 
 def _ok(b: Backend, x: torch.Tensor, rank: int, kind: str, phase: str) -> bool:
+    if not b.available():
+        return False
     check = getattr(b, "supports_bwd", None) if phase == "bwd" else None
-    return b.available() and (check or b.supports)(x, rank, kind)
+    if check is None:  # explicit None test: older Dynamo cannot trace the truthiness of a bound method
+        check = b.supports
+    return check(x, rank, kind)
 
 
 def select_backend(requested: str, x: torch.Tensor, rank: int, kind: str, phase: str = "fwd") -> Backend:
