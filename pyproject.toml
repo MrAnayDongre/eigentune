@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,14 @@ name = "eigentune"
 dynamic = ["version"]
 description = "Parameter-efficient fine-tuning inside a model's pretrained singular subspaces, with optional Triton and CUDA kernels."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Anay Dongre", email = "dongreanay@gmail.com" }]
 requires-python = ">=3.9"
 keywords = ["peft", "fine-tuning", "svd", "lora", "llm", "pytorch"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
