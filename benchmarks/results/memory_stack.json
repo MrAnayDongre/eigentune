@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "git_sha": "ae652a8",
+    "eigentune": "0.2.0.dev0",
+    "torch": "2.13.0+cu130",
+    "triton": "3.7.1",
+    "cuda": "13.0",
+    "hip": null,
+    "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "python": "3.10.20",
+    "date": "2026-10-05"
+  },
+  "rows": [
+    {
+      "tokens": 2048,
+      "rank": 16,
+      "frozen": 365.8251953125,
+      "eigentune_diag": 355.5810546875,
+      "eigentune_core": 355.5810546875,
+      "lora": 645.3173828125,
+      "lora_bf16": 435.5673828125,
+      "dora": 1181.97265625
+    },
+    {
+      "tokens": 8192,
+      "rank": 16,
+      "frozen": 1463.2861328125,
+      "eigentune_diag": 1422.2685546875,
+      "eigentune_core": 1422.2685546875,
+      "lora": 2581.2548828125,
+      "lora_bf16": 1742.2548828125,
+      "dora": 4560.43896484375
+    },
+    {
+      "tokens": 12288,
+      "rank": 16,
+      "frozen": 2195.9267578125,
+      "eigentune_diag": 2134.3935546875,
+      "eigentune_core": 2134.3935546875,
+      "lora": 3872.8798828125,
+      "lora_bf16": 2614.3798828125,
+      "dora": null
+    }
+  ]
+}
