@@ -119,3 +119,38 @@ def test_tied_embeddings_are_not_adapted_by_default():
     m = get_eigentune_model(tiny_llama(), EigenTuneConfig(rank=4))
     names = [n for n, _ in iter_eigentune_layers(m)]
     assert not any("lm_head" in n for n in names)
+
+
+def test_merge_and_unload_gives_a_plain_model_that_round_trips_through_save_pretrained(tmp_path):
+    from eigentune import merge_and_unload
+
+    original_keys = set(tiny_llama().state_dict())
+    m = get_eigentune_model(tiny_llama(), EigenTuneConfig(rank=4, target_modules=["q_proj", "v_proj"]))
+    with torch.no_grad():
+        for _, layer in iter_eigentune_layers(m):
+            layer.delta.normal_(std=0.05)
+    x = batch()
+    before = m(**x).logits
+    assert any(".base." in k for k in m.state_dict()), "adapted state_dict has wrapper keys"
+    merge_and_unload(m)
+    assert not list(iter_eigentune_layers(m)) and not hasattr(m, "eigentune_config")
+    assert set(m.state_dict()) == original_keys, "the plain model's keys are restored"
+    assert torch.allclose(m(**x).logits, before, atol=1e-4)
+    m.save_pretrained(tmp_path)
+    reloaded = LlamaForCausalLM.from_pretrained(tmp_path)
+    assert torch.allclose(reloaded(**x).logits, before, atol=1e-4)
+
+
+def test_unload_discards_the_adapter_and_restores_the_base_behaviour():
+    from eigentune import unload
+
+    base = tiny_llama()
+    x = batch()
+    ref = base(**x).logits
+    m = get_eigentune_model(base, EigenTuneConfig(rank=4))
+    with torch.no_grad():
+        for _, layer in iter_eigentune_layers(m):
+            layer.delta.normal_(std=0.5)
+    assert not torch.allclose(m(**x).logits, ref, atol=1e-3)
+    unload(m)
+    assert torch.allclose(m(**x).logits, ref, atol=1e-6)

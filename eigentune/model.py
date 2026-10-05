@@ -122,6 +122,31 @@ def unmerge_adapter(model: nn.Module) -> nn.Module:
     return model
 
 
+def _restore_base_layers(model: nn.Module) -> nn.Module:
+    for name, layer in list(iter_eigentune_layers(model)):
+        parent_name, _, child = name.rpartition(".")
+        setattr(model.get_submodule(parent_name) if parent_name else model, child, layer.base)
+    if hasattr(model, "eigentune_config"):
+        del model.eigentune_config
+    return model
+
+
+def merge_and_unload(model: nn.Module) -> nn.Module:
+    """Fold every adapter into its base weight and restore the original layers, in place.
+
+    The result is the plain model again (same module tree and ``state_dict`` keys as before adaptation) with the
+    fine-tuning baked in, so ``save_pretrained`` / ``from_pretrained`` work as for any model. Needs plain
+    floating-point ``nn.Linear`` bases; merging is exact in fp32 and rounds to the weight dtype otherwise.
+    """
+    merge_adapter(model)
+    return _restore_base_layers(model)
+
+
+def unload(model: nn.Module) -> nn.Module:
+    """Discard the adapters and restore the original layers (the base weights are untouched unless already merged)."""
+    return _restore_base_layers(unmerge_adapter(model))
+
+
 def adapter_report(model: nn.Module) -> Dict[str, int]:
     """What the adapter costs, kept apart on purpose.
 

@@ -47,6 +47,14 @@ without them the call raises instead of decomposing integer data.
 **This has not been tested here.** `bitsandbytes`, GPTQ and AWQ were not installed, so 4-bit and 8-bit bases are an unverified design,
 not a supported feature. Merging into a quantized base is not supported (`merge` needs a plain floating-point `nn.Linear`).
 
+## Saving a fine-tuned model
+
+An adapted model's `state_dict()` has wrapper keys (`...q_proj.base.weight`), so `model.save_pretrained()` on it (which is what
+`Trainer` calls for its own checkpoints) writes a checkpoint a stock `from_pretrained` cannot load. Use the adapter files
+(`save_adapter`, or `EigenTuneCallback` during training), or call `merge_and_unload(model)` first to get the plain model
+back with the adapters baked in. Merging is exact in fp32 and rounds to the weight dtype in fp16/bf16, so
+`unmerge_adapter` after a bf16 merge restores the weights only to rounding error.
+
 ## Hugging Face PEFT
 
 EigenTune does not integrate with PEFT's `get_peft_model` (see [architecture](architecture.md) for why). It works on the same

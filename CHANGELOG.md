@@ -11,7 +11,8 @@ All notable changes. Versions before 1.0 may change interfaces between minor rel
   `rank_budget` that spends singular directions where the spectral energy is.
 - `save_adapter` / `load_adapter`: safetensors plus a versioned JSON header; base-weight fingerprints and a basis
   signature are verified on load; `save_bases=True` embeds the exact bases.
-- `merge_adapter` / `unmerge_adapter`, `adapter_report` (trainable parameters, adapter bytes and runtime basis bytes, kept apart).
+- `merge_adapter` / `unmerge_adapter`, `merge_and_unload` / `unload` (back to a plain model whose `state_dict` keys match the
+  original, so `save_pretrained` works), `adapter_report` (trainable parameters, adapter bytes and runtime basis bytes, kept apart).
 - Direct module injection: no PEFT dependency, works on a plain `nn.Module`.
 - Backends: `torch` (reference), `triton` (CUDA and ROCm), `native` (CUDA; HIP source included, untested on AMD),
   chosen by `backend="auto"` from measured thresholds, or by name. Third-party backends can register.
