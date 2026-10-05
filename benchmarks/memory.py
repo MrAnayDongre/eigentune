@@ -63,10 +63,91 @@ def build(kind, rank, d_in, d_out, dtype):
     return get_peft_model(m, cfg)
 
 
+def stack_peak(kind, rank, tokens, layers=4):
+    """Peak GPU memory (above the resident weights) of one forward+backward through a Qwen3-shaped stack."""
+    from transformers import Qwen3Config, Qwen3ForCausalLM
+
+    torch.manual_seed(0)
+    cfg = Qwen3Config(
+        vocab_size=2048,
+        hidden_size=1024,
+        intermediate_size=3072,
+        num_hidden_layers=layers,
+        num_attention_heads=16,
+        num_key_value_heads=8,
+        head_dim=64,
+        max_position_embeddings=16384,
+    )
+    model = Qwen3ForCausalLM(cfg).to("cuda", torch.bfloat16)
+    model.config.use_cache = False
+    targets = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    model.requires_grad_(False)
+    if kind == "frozen":
+        model.enable_input_require_grads()  # a frozen stack still has to backpropagate through its layers
+    elif kind.startswith("eigentune"):
+        model = get_eigentune_model(
+            model,
+            EigenTuneConfig(
+                rank=rank,
+                method="spectral_core" if "core" in kind else "diagonal",
+                target_modules=targets,
+                backend="torch",
+            ),
+        )
+    else:
+        from peft import LoraConfig, get_peft_model
+
+        lc = LoraConfig(
+            r=rank, lora_alpha=2 * rank, target_modules=targets, lora_dropout=0.0, use_dora=(kind == "dora")
+        )
+        model = get_peft_model(model, lc, autocast_adapter_dtype=(kind != "lora_bf16"))
+    ids = torch.randint(0, 2048, (1, tokens), device="cuda")
+    for _ in range(2):
+        model(input_ids=ids, labels=ids).loss.backward()
+        model.zero_grad(set_to_none=True)
+    torch.cuda.synchronize()
+    base = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    model(input_ids=ids, labels=ids).loss.backward()
+    torch.cuda.synchronize()
+    peak = (torch.cuda.max_memory_allocated() - base) / 2**20
+    del model
+    torch.cuda.empty_cache()
+    return peak
+
+
+def main_model(out):
+    from _thermal import governor
+
+    torch.cuda.set_per_process_memory_fraction(0.8)
+    rows = []
+    kinds = ("frozen", "eigentune_diag", "eigentune_core", "lora", "lora_bf16", "dora")
+    print("peak MiB above resident weights, 4-layer Qwen3-shaped stack, bf16, rank 16 (frozen: input-grad only)")
+    print(f"{'tokens':>7}  " + "  ".join(f"{k:>15}" for k in kinds))
+    for tokens in (2048, 8192, 12288):
+        row = {"tokens": tokens, "rank": 16}
+        for k in kinds:
+            governor()
+            try:
+                row[k] = stack_peak(k, 16, tokens)
+            except torch.OutOfMemoryError:  # over the 6 GiB cap: that is a result, not a failure
+                row[k] = None
+                torch.cuda.empty_cache()
+        rows.append(row)
+        print(
+            f"{tokens:7d}  " + "  ".join(f"{'OOM' if row[k] is None else f'{row[k]:.1f}':>15}" for k in kinds),
+            flush=True,
+        )
+    print("saved", save(out, {"meta": metadata(), "rows": rows}))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="memory")
+    ap.add_argument("--model", action="store_true", help="whole-stack peak GPU memory instead of per-layer saved bytes")
     a = ap.parse_args()
+    if a.model:
+        return main_model("memory_stack")
     d_in, d_out, dtype = 4096, 4096, torch.bfloat16
     rows = []
     print(f"layer {d_in}x{d_out}, bf16; MiB of activations kept for backward (adapter + base)")

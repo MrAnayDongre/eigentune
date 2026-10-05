@@ -162,7 +162,7 @@ def section_quality():
     rows = sorted(rows, key=lambda r: r["eval_loss_mean"])
     lines = [
         "## Quality against PEFT baselines\n",
-        "Qwen3-0.6B (bf16) fine-tuned on 2,000 GSM8K training solutions for 250 optimizer steps (batch 8, sequence 192, "
+        "Qwen3-0.6B (bf16) fine-tuned on 2,000 GSM8K training solutions for 150 optimizer steps (effective batch 8, sequence 192, "
         "cosine schedule), seven attention and MLP projections per layer adapted. Metric: cross-entropy on the answer tokens of "
         "500 held-out GSM8K test problems (lower is better). The pretrained model scores "
         f"{base:.3f} on the first 128 of those. Learning rate swept per method on seed 0 (three values), then the best rate rerun "
@@ -181,12 +181,52 @@ def section_quality():
         "",
         "### Learning-rate sweep (seed 0, final eval loss)",
         "",
-        "| method | rank | " + " | ".join(["lr 1", "lr 2", "lr 3"]) + " |",
-        "|---|---|---|---|---|",
+        "| method | rank | learning rates tried (final eval loss) |",
+        "|---|---|---|",
     ]
     for r in rows:
         cells = [f"{lr}: {('diverged' if v is None else f'{v:.4f}')}" for lr, v in r["sweep"].items()]
-        lines.append(f"| {r['method']} | {r['rank']} | " + " | ".join(cells + [""] * (3 - len(cells))) + " |")
+        lines.append(f"| {r['method']} | {r['rank']} | " + "; ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def section_stack():
+    d = load("memory_stack")
+    if not d:
+        return ""
+    kinds = ["frozen", "eigentune_diag", "eigentune_core", "lora", "lora_bf16", "dora"]
+    lines = [
+        "## Whole-model activation memory\n",
+        "Peak GPU memory above the resident weights for one forward and backward through a 4-layer Qwen3-shaped stack "
+        "(1024 hidden, 3072 MLP), bf16, rank 16, all seven projections adapted, cap 6 GiB. `frozen` backpropagates through the "
+        "unadapted layers only. `benchmarks/memory.py --model`.\n",
+        "| tokens | " + " | ".join(kinds) + " |",
+        "|---|" + "---|" * len(kinds),
+    ]
+    for r in d["rows"]:
+        lines.append(f"| {r['tokens']} | " + " | ".join("OOM" if r[k] is None else f"{r[k]:.0f}" for k in kinds) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def section_training():
+    d = load("training")
+    if not d:
+        return ""
+    lines = [
+        "## Training-step latency by backend\n",
+        "One forward and backward through the same 4-layer stack, rank 16, median of 5 repetitions; the figure in brackets is the speedup over the "
+        "`torch` backend. Differences under about 20% at small token counts are within run-to-run noise (launch-bound eager execution). "
+        "`benchmarks/training.py`.\n",
+        "| method | tokens | torch | triton | native | auto |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in d["rows"]:
+        base = r["torch"]["median_us"]
+        cells = [
+            f"{r[b]['median_us'] / 1000:.2f} ms (x{base / r[b]['median_us']:.2f})"
+            for b in ("torch", "triton", "native", "auto")
+        ]
+        lines.append(f"| {r['method']} | {r['tokens']} | " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
 
@@ -197,7 +237,17 @@ def main():
         + findings
         + "\n"
         + "\n".join(
-            s for s in (section_env(), section_kernels(), section_init(), section_memory(), section_quality()) if s
+            s
+            for s in (
+                section_env(),
+                section_kernels(),
+                section_init(),
+                section_memory(),
+                section_stack(),
+                section_quality(),
+                section_training(),
+            )
+            if s
         )
     )
     OUT.parent.mkdir(exist_ok=True)

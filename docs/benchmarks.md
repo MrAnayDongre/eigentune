@@ -1,5 +1,52 @@
 # Benchmarks
 
+Everything here was measured on one laptop (RTX 5070 Laptop GPU, 8 GB), one small model (Qwen3-0.6B) and one task
+(GSM8K solutions). It does not show how EigenTune behaves on larger models, other tasks or other hardware. The tables below the
+summary are regenerated from the stored results and are the source of truth.
+
+## Summary
+
+**Where EigenTune is ahead, measured**
+
+* **Trainable parameters.** 3,136 to 12,544, against 630,784 (LoRA rank 1) to 5,046,272 (LoRA rank 8): 50x to 1,600x fewer.
+* **Adapter file size, if the bases are rebuilt on load.** 59,587 to 97,483 bytes against 2.6 MB (LoRA rank 1) to 20.2 MB
+  (LoRA rank 8). This is the default `save_adapter`.
+* **Activation memory.** In a 4-layer Qwen3-shaped stack at 8,192 tokens, EigenTune's peak is 1,422 MiB, the same as a frozen
+  model that only backpropagates (1,463 MiB); LoRA with PEFT's default fp32 adapters adds 1,118 MiB, LoRA with bf16 adapters 279 MiB, DoRA
+  3,097 MiB (and DoRA runs out of memory at 12,288 tokens under the 6 GiB cap).
+* **Training speed.** The same steps per second as LoRA (3.3 - 3.4 against 3.4 - 3.5); DoRA is about 1.7x slower.
+
+**Where EigenTune is behind, measured**
+
+* **Quality.** Eval loss 0.612 (best EigenTune, diagonal rank 64, 12,544 parameters) against 0.534 for LoRA rank 8. LoRA rank 1, with
+  630,784 parameters, reaches 0.547, ahead of every EigenTune configuration. The pretrained model scores 1.388 on the first 128 of the 500 evaluation problems.
+* **The `r x r` core does not beat the diagonal per parameter.** At the same 12,544 trainable parameters, diagonal rank 64 gets 0.612 and the
+  core at rank 8 gets 0.629. The core reaches that with 8x fewer basis bytes (10.3 MB against 80.9 MB with bases embedded), so it is a
+  storage trade-off, not a quality win.
+* **Minor directions are not better than principal ones** here (diagonal rank 16: 0.684 against 0.664, one seed), and the relative update
+  makes no difference (0.666 against 0.664).
+* **Storage with the bases.** The frozen bases are not free: 20 to 81 MB at runtime, and the same if embedded in the file for exact
+  portability, which is as large as or larger than the LoRA adapter (20.2 MB).
+* **Initialization.** 4.5 to 14.5 s for the SVDs of 196 layers, against 0.6 s for LoRA and 1.4 s for PiSSA.
+* **Whole-model peak memory in the training runs** is the same as LoRA (3.54 - 3.61 GB against 3.59 GB), because at that batch size the adapter is not
+  what dominates memory.
+* **Kernels do not change a training step much.** The kernel-level speedups below are real (up to 5.2x for a 4-token forward) but inside a
+  transformer step the adapter is a small part of the time: the accelerated backends are within 0 - 5% of the PyTorch path at 3,072 and
+  8,192 tokens, and within noise at small token counts (`benchmarks/results/training.json`).
+
+**State of the art?** In none of the dimensions measured except trainable-parameter count, adapter file size (with bases rebuilt)
+and adapter activation memory. On downstream quality EigenTune is clearly behind LoRA, DoRA, rsLoRA, LoRA+ and PiSSA on this task.
+
+## How the quality comparison was run
+
+Qwen3-0.6B (bf16), seven attention and MLP projections per layer adapted, 2,000 GSM8K training solutions, 150 optimizer steps,
+effective batch 8 (micro-batch 2 with 4 accumulation steps), sequence length 192, cosine schedule, AdamW, no weight decay. The metric is
+cross-entropy on the answer tokens of 500 held-out GSM8K test problems. For every method the learning rate was searched on seed 0 starting from a
+three-value prior and extended by 3x toward whichever edge held the best value (at most four runs), so no method was judged on a grid that stops short
+of its optimum; the best rate was then rerun on a second seed. **Two seeds** only: the spread between them is about 0.001, which
+shows the run-to-run noise from data order and initialization is small, not that the ranking is established beyond this setup.
+Ablations (minor selection, relative update) are single-seed. LoRA-FA and OLoRA are supported by the harness but were not run, to fit the thermal
+budget of the machine; EVA, CorDA and MiCA were not run.
 
 ## Environment
 
@@ -120,3 +167,66 @@ MiB of activations autograd keeps for the backward pass, per adapted 4096x4096 l
 | 8192 | 16 | 64 | 0.000 | 0.250 | 0.250 | 128.500 | 64.250 | 384.797 |
 
 `lora` is PEFT's default (adapters in fp32, so the input is cast and a copy kept); `lora_bf16` keeps adapters in the base dtype. Plain autograd with frozen bases also keeps only `Q` (measured: 0.250 MiB at 8192 tokens, rank 16), so the custom autograd function is not what saves this memory.
+
+## Whole-model activation memory
+
+Peak GPU memory above the resident weights for one forward and backward through a 4-layer Qwen3-shaped stack (1024 hidden, 3072 MLP), bf16, rank 16, all seven projections adapted, cap 6 GiB. `frozen` backpropagates through the unadapted layers only. `benchmarks/memory.py --model`.
+
+| tokens | frozen | eigentune_diag | eigentune_core | lora | lora_bf16 | dora |
+|---|---|---|---|---|---|---|
+| 2048 | 366 | 356 | 356 | 645 | 436 | 1182 |
+| 8192 | 1463 | 1422 | 1422 | 2581 | 1742 | 4560 |
+| 12288 | 2196 | 2134 | 2134 | 3873 | 2614 | OOM |
+
+## Quality against PEFT baselines
+
+Qwen3-0.6B (bf16) fine-tuned on 2,000 GSM8K training solutions for 150 optimizer steps (effective batch 8, sequence 192, cosine schedule), seven attention and MLP projections per layer adapted. Metric: cross-entropy on the answer tokens of 500 held-out GSM8K test problems (lower is better). The pretrained model scores 1.388 on the first 128 of those. Learning rate swept per method on seed 0 (three values), then the best rate rerun on seeds 1 and 2; ablations are single-seed. `benchmarks/compare_peft.py`.
+
+| method | rank | trainable params | adapter file (B) | adapter + bases (B) | runtime bases (B) | eval loss | steps/s | peak VRAM (MiB) | init (s) | lr | seeds |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| lora | 8 | 5,046,272 | 20,242,825 | 20,242,825 | 0 | 0.5341 +- 0.0001 | 3.37 | 3588 | 0.6 | 0.001 | 2 |
+| dora | 8 | 5,390,336 | 21,645,976 | 21,645,976 | 0 | 0.5343 +- 0.0008 | 1.96 | 3909 | 0.7 | 0.001 | 2 |
+| rslora | 8 | 5,046,272 | 20,242,824 | 20,242,824 | 0 | 0.5344 +- 0.0007 | 3.38 | 3588 | 0.6 | 0.0003 | 2 |
+| lora_plus | 8 | 5,046,272 | 20,242,825 | 20,242,825 | 0 | 0.5360 +- 0.0019 | 3.37 | 3588 | 0.6 | 0.00015 | 2 |
+| pissa | 8 | 5,046,272 | 20,242,837 | 20,242,837 | 0 | 0.5449 +- 0.0009 | 3.40 | 3588 | 1.4 | 0.0001 | 2 |
+| lora | 1 | 630,784 | 2,580,176 | 2,580,176 | 0 | 0.5469 +- 0.0004 | 3.51 | 3537 | 0.6 | 0.003 | 2 |
+| eigentune_diag | 64 | 12,544 | 97,482 | 80,947,537 | 80,790,528 | 0.6119 +- 0.0014 | 3.36 | 3608 | 14.5 | 0.1 | 2 |
+| eigentune_core | 8 | 12,544 | 97,483 | 10,254,418 | 10,098,816 | 0.6285 +- 0.0008 | 3.33 | 3540 | 4.5 | 0.03 | 2 |
+| eigentune_core_minor | 8 | 12,544 | 97,447 | 10,254,382 | 10,098,816 | 0.6323 +- 0.0000 | 3.31 | 3541 | 11.9 | 0.03 | 1 |
+| eigentune_diag | 16 | 3,136 | 59,587 | 20,316,426 | 20,197,632 | 0.6635 +- 0.0009 | 3.38 | 3550 | 5.6 | 0.3 | 2 |
+| eigentune_diag_relative | 16 | 3,136 | 59,587 | 20,316,426 | 20,197,632 | 0.6656 +- 0.0000 | 3.34 | 3550 | 5.6 | 0.09 | 1 |
+| eigentune_diag_minor | 16 | 3,136 | 59,563 | 20,316,402 | 20,197,632 | 0.6842 +- 0.0000 | 3.40 | 3550 | 11.8 | 0.3 | 1 |
+
+### Learning-rate sweep (seed 0, final eval loss)
+
+| method | rank | learning rates tried (final eval loss) |
+|---|---|---|
+| lora | 8 | 0.0003: 0.5441; 0.001: 0.5342; 0.003: 0.6050 |
+| dora | 8 | 0.0003: 0.5443; 0.001: 0.5351; 0.003: 0.6074 |
+| rslora | 8 | 0.0001: 0.5504; 0.0003: 0.5336; 0.001: 0.5538 |
+| lora_plus | 8 | 5e-05: 0.5424; 0.00015: 0.5379; 0.0005: 0.5837; 0.0015: 0.9327 |
+| pissa | 8 | 3.33333e-05: 0.5720; 0.0001: 0.5440; 0.0003: 0.5492; 0.001: 0.6250 |
+| lora | 1 | 0.001: 0.5498; 0.003: 0.5473; 0.01: 0.6591 |
+| eigentune_diag | 64 | 0.03: 0.6243; 0.1: 0.6105; 0.3: 0.6476 |
+| eigentune_core | 8 | 0.01: 0.6774; 0.03: 0.6277; 0.1: 0.6319 |
+| eigentune_core_minor | 8 | 0.03: 0.6323 |
+| eigentune_diag | 16 | 0.1: 0.6713; 0.3: 0.6626; 0.9: 0.6905 |
+| eigentune_diag_relative | 16 | 0.03: 0.6728; 0.09: 0.6656 |
+| eigentune_diag_minor | 16 | 0.3: 0.6842 |
+
+## Training-step latency by backend
+
+One forward and backward through the same 4-layer stack, rank 16, median of 5 repetitions; the figure in brackets is the speedup over the `torch` backend. Differences under about 20% at small token counts are within run-to-run noise (launch-bound eager execution). `benchmarks/training.py`.
+
+| method | tokens | torch | triton | native | auto |
+|---|---|---|---|---|---|
+| diagonal | 1 | 10.51 ms (x1.00) | 10.78 ms (x0.97) | 7.94 ms (x1.32) | 8.02 ms (x1.31) |
+| diagonal | 16 | 8.43 ms (x1.00) | 10.93 ms (x0.77) | 8.11 ms (x1.04) | 9.07 ms (x0.93) |
+| diagonal | 768 | 11.06 ms (x1.00) | 11.07 ms (x1.00) | 9.20 ms (x1.20) | 8.94 ms (x1.24) |
+| diagonal | 3072 | 40.29 ms (x1.00) | 38.91 ms (x1.04) | 40.98 ms (x0.98) | 38.94 ms (x1.03) |
+| diagonal | 8192 | 154.21 ms (x1.00) | 150.15 ms (x1.03) | 157.41 ms (x0.98) | 154.67 ms (x1.00) |
+| spectral_core | 1 | 8.41 ms (x1.00) | 10.85 ms (x0.78) | 8.45 ms (x1.00) | 8.24 ms (x1.02) |
+| spectral_core | 16 | 11.19 ms (x1.00) | 10.95 ms (x1.02) | 8.70 ms (x1.29) | 8.81 ms (x1.27) |
+| spectral_core | 768 | 9.39 ms (x1.00) | 11.28 ms (x0.83) | 9.72 ms (x0.97) | 9.42 ms (x1.00) |
+| spectral_core | 3072 | 40.66 ms (x1.00) | 38.89 ms (x1.05) | 40.78 ms (x1.00) | 38.90 ms (x1.05) |
+| spectral_core | 8192 | 154.87 ms (x1.00) | 153.14 ms (x1.01) | 154.69 ms (x1.00) | 151.57 ms (x1.02) |

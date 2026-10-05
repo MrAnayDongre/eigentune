@@ -18,10 +18,10 @@ All notable changes. Versions before 1.0 may change interfaces between minor rel
   chosen by `backend="auto"` from measured thresholds, or by name. Third-party backends can register.
 - Converged randomized truncated SVD with a seeded generator and an on-disk cache.
 
-### Performance
+### Measured
 - Adapter activation memory: 0.25 MiB per 4096x4096 layer at 8192 tokens, rank 16, against 64-385 MiB for LoRA/DoRA (measured).
 - Basis initialization on GPU: 0.07-0.45 s against 5.2 s for a full SVD, reconstruction error <= 1.6e-4 (Llama-2-7B weights).
-- Few-token forward on CUDA: up to 3.9x over the PyTorch path (eager); large-token forward and backward: up to ~2x with Triton.
+- Few-token forward on CUDA: up to 5.2x over the PyTorch path (eager, 4 tokens; the range over shapes is 0.7x - 5.2x); large-token forward and backward: up to ~2x with Triton.
   Details and the regimes where each backend loses: `docs/benchmarks.md`.
 
 ### Compatibility
@@ -39,4 +39,7 @@ All notable changes. Versions before 1.0 may change interfaces between minor rel
 - ROCm/HIP: implemented and statically checked only; never compiled or run on AMD hardware.
 - Quantized (4-bit/8-bit) bases, DDP, FSDP and multi-GPU are untested.
 - Dispatch thresholds are measured on one GPU (RTX 5070 Laptop).
-- Quality comparisons use one small model and task (Qwen3-0.6B on GSM8K solutions); see `docs/benchmarks.md` for their scope.
+- Quality: on the one task measured (Qwen3-0.6B, GSM8K solutions, two seeds) EigenTune trails LoRA, DoRA, rsLoRA, LoRA+ and PiSSA
+  (best eval loss 0.612 against 0.534). The `r x r` core does not beat a larger diagonal at the same parameter count.
+- The kernel speedups are layer-level; inside a transformer training step they are 0-5%.
+- Initialization is slower than LoRA/PiSSA (4.5-14.5 s against under 2 s on Qwen3-0.6B).

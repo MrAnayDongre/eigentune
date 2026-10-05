@@ -1,0 +1,60 @@
+{
+  "method": "pissa",
+  "rank": 8,
+  "init_seconds": 1.4215835189970676,
+  "trainable_parameters": 5046272,
+  "runtime_basis_bytes": 0,
+  "adapter_bytes": 20242837,
+  "adapter_bytes_with_bases": 20242837,
+  "lr": 0.0003,
+  "seed": 0,
+  "steps": 150,
+  "diverged": false,
+  "base_eval_loss_128": 1.3875774418766935,
+  "final_eval_loss": 0.5491927546704624,
+  "curve": [
+    [
+      0,
+      1.3891346983907693
+    ],
+    [
+      25,
+      0.6322725116081958
+    ],
+    [
+      50,
+      0.6100392541077567
+    ],
+    [
+      75,
+      0.5909002854612543
+    ],
+    [
+      100,
+      0.5723050320019257
+    ],
+    [
+      125,
+      0.5581434154165935
+    ],
+    [
+      150,
+      0.5536325253333877
+    ]
+  ],
+  "train_loss_last10": 0.5204603344202041,
+  "steps_per_second": 3.363316993496807,
+  "tokens_per_second": 4363.163869323537,
+  "peak_vram_mib": 3587.9775390625,
+  "meta": {
+    "git_sha": "ae652a8",
+    "eigentune": "0.2.0.dev0",
+    "torch": "2.13.0+cu130",
+    "triton": "3.7.1",
+    "cuda": "13.0",
+    "hip": null,
+    "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "python": "3.10.20",
+    "date": "2026-10-05"
+  }
+}

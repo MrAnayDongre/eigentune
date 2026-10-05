@@ -1,17 +1,17 @@
 {
   "method": "eigentune_diag",
   "rank": 16,
-  "init_seconds": 5.884414117987035,
+  "init_seconds": 5.581933166977251,
   "trainable_parameters": 3136,
   "runtime_basis_bytes": 20197632,
   "adapter_bytes": 59587,
   "adapter_bytes_with_bases": 20316426,
-  "lr": 0.1,
-  "seed": 0,
+  "lr": 0.3,
+  "seed": 1,
   "steps": 150,
   "diverged": false,
   "base_eval_loss_128": 1.3875774418766935,
-  "final_eval_loss": 0.6713756608270075,
+  "final_eval_loss": 0.6643563654685226,
   "curve": [
     [
       0,
@@ -19,35 +19,35 @@
     ],
     [
       25,
-      0.8535509303218148
+      0.8249747994146114
     ],
     [
       50,
-      0.7386534492924528
+      0.7429902997470582
     ],
     [
       75,
-      0.6961881082443673
+      0.7048938973272532
     ],
     [
       100,
-      0.680375342443735
+      0.6847340513740089
     ],
     [
       125,
-      0.6752961687465501
+      0.6731467952598104
     ],
     [
       150,
-      0.6740237462286105
+      0.6678341222737794
     ]
   ],
-  "train_loss_last10": 0.6465355515480041,
-  "steps_per_second": 4.4967720369385304,
-  "tokens_per_second": 5833.572428079617,
-  "peak_vram_mib": 3933.66162109375,
+  "train_loss_last10": 0.6348405450582504,
+  "steps_per_second": 3.3507397688769722,
+  "tokens_per_second": 4379.774290164216,
+  "peak_vram_mib": 3549.8603515625,
   "meta": {
-    "git_sha": "ff569d9",
+    "git_sha": "ae652a8",
     "eigentune": "0.2.0.dev0",
     "torch": "2.13.0+cu130",
     "triton": "3.7.1",
@@ -55,6 +55,6 @@
     "hip": null,
     "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
     "python": "3.10.20",
-    "date": "2026-10-04"
+    "date": "2026-10-05"
   }
 }
