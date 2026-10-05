@@ -26,16 +26,15 @@ HERE = Path(__file__).parent
 OUT = HERE / "results" / "quality"
 PY = sys.executable
 STEPS = 150
-MAX_EVALS = 5
+MAX_EVALS = 4
 
 # (method, rank, starting learning rates)
 CONFIGS = [
-    ("eigentune_diag", 16, [1e-2, 3e-2, 1e-1]),
+    ("eigentune_diag", 16, [1e-1, 3e-1, 9e-1]),
     ("eigentune_core", 8, [1e-2, 3e-2, 1e-1]),
     ("lora", 8, [3e-4, 1e-3, 3e-3]),
     ("lora", 1, [1e-3, 3e-3, 1e-2]),
-    ("eigentune_diag", 64, [1e-2, 3e-2, 1e-1]),
-    ("eigentune_core", 16, [1e-2, 3e-2, 1e-1]),
+    ("eigentune_diag", 64, [3e-2, 1e-1, 3e-1]),
     ("dora", 8, [3e-4, 1e-3, 3e-3]),
     ("pissa", 8, [1e-4, 3e-4, 1e-3]),
     ("rslora", 8, [1e-4, 3e-4, 1e-3]),

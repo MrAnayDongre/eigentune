@@ -2,7 +2,7 @@
 
     python benchmarks/quality.py --method eigentune_diag --rank 16 --lr 1e-2 --seed 0 --out run.json
 
-Everything that is not the method is fixed: model, data, split, sequence length, batch, steps, schedule, clipping.
+Everything that is not the method is fixed: model, data, split, sequence length, effective batch (8), steps, schedule, clipping.
 Primary metric: held-out loss on the answer tokens of 500 GSM8K test problems.
 """
 
@@ -25,7 +25,7 @@ from _thermal import governor  # noqa: E402
 
 MODEL = "Qwen/Qwen3-0.6B"
 SEQ = 192
-MICRO, ACCUM = 4, 2
+EFFECTIVE_BATCH = 8
 N_TRAIN, N_EVAL = 2000, 500
 
 
@@ -73,7 +73,8 @@ def evaluate(model, data, pad, limit=None):
     return tot / cnt
 
 
-def run(method, rank, lr, seed, steps):
+def run(method, rank, lr, seed, steps, micro=2):
+    accum = EFFECTIVE_BATCH // micro
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     torch.cuda.set_per_process_memory_fraction(0.8)  # leave headroom: this GPU also drives the display
@@ -101,12 +102,12 @@ def run(method, rank, lr, seed, steps):
         governor()  # pause (GPU idle) if the shared CPU/GPU thermal envelope is exceeded
         torch.cuda.synchronize()
         t0 = time.perf_counter()
-        for _ in range(ACCUM):
-            batch = [train[order[(cursor + j) % N_TRAIN]] for j in range(MICRO)]
-            cursor += MICRO
+        for _ in range(accum):
+            batch = [train[order[(cursor + j) % N_TRAIN]] for j in range(micro)]
+            cursor += micro
             ids, lab, att = collate(batch, pad)
             out = model(input_ids=ids, attention_mask=att, labels=lab)
-            (out.loss / ACCUM).backward()
+            (out.loss / accum).backward()
             tokens += int(att.sum())
         torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
         opt.step()
@@ -142,10 +143,11 @@ def main():
     ap.add_argument("--rank", type=int, default=8)
     ap.add_argument("--lr", type=float, required=True)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--steps", type=int, default=250)
+    ap.add_argument("--steps", type=int, default=150)
+    ap.add_argument("--micro", type=int, default=2, help="micro-batch; accumulation keeps the effective batch at 8")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    res = run(a.method, a.rank, a.lr, a.seed, a.steps)
+    res = run(a.method, a.rank, a.lr, a.seed, a.steps, a.micro)
     res["meta"] = metadata()
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(res, indent=2))
