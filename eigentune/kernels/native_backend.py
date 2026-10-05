@@ -28,8 +28,12 @@ def _load():
     try:
         from torch.utils.cpp_extension import load
 
-        _ext = load(name="eigentune_native", sources=[str(_SRC)], extra_cuda_cflags=["-O3"],
-                    verbose=bool(os.environ.get("EIGENTUNE_VERBOSE_BUILD")))
+        _ext = load(
+            name="eigentune_native",
+            sources=[str(_SRC)],
+            extra_cuda_cflags=["-O3"],
+            verbose=bool(os.environ.get("EIGENTUNE_VERBOSE_BUILD")),
+        )
     except Exception as exc:  # no toolchain, unsupported arch, ...: the backend just reports unavailable
         _failed = exc
     return _ext
@@ -45,8 +49,14 @@ class NativeBackend(TorchBackend):
 
     def supports(self, x: torch.Tensor, rank: int, kind: str) -> bool:
         vec = 16 // x.element_size()
-        return (x.is_cuda and x.dtype in (torch.float16, torch.bfloat16, torch.float32) and 1 <= x.shape[0] <= MAX_TOKENS
-                and 1 <= rank <= MAX_RANK and x.shape[0] * rank <= MAX_ELEMS and x.shape[1] % vec == 0)
+        return (
+            x.is_cuda
+            and x.dtype in (torch.float16, torch.bfloat16, torch.float32)
+            and 1 <= x.shape[0] <= MAX_TOKENS
+            and 1 <= rank <= MAX_RANK
+            and x.shape[0] * rank <= MAX_ELEMS
+            and x.shape[1] % vec == 0
+        )
 
     def supports_bwd(self, q: torch.Tensor, rank: int, kind: str) -> bool:
         return q.is_cuda and q.dtype in (torch.float16, torch.bfloat16, torch.float32) and kind == "diag" and rank >= 1

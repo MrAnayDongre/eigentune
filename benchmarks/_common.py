@@ -25,14 +25,20 @@ def metadata() -> dict:
 
     try:
         import triton
+
         triton_v = triton.__version__
     except ImportError:
         triton_v = None
     dev = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
     return {
         "git_sha": sh(["git", "-C", str(Path(__file__).parent), "rev-parse", "--short", "HEAD"]),
-        "eigentune": eigentune.__version__, "torch": torch.__version__, "triton": triton_v,
-        "cuda": torch.version.cuda, "hip": torch.version.hip, "gpu": dev, "python": platform.python_version(),
+        "eigentune": eigentune.__version__,
+        "torch": torch.__version__,
+        "triton": triton_v,
+        "cuda": torch.version.cuda,
+        "hip": torch.version.hip,
+        "gpu": dev,
+        "python": platform.python_version(),
         "date": time.strftime("%Y-%m-%d"),
     }
 

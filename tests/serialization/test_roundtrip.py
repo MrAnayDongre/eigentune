@@ -86,7 +86,7 @@ def test_signature_catches_a_changed_basis(tmp_path):
     save_adapter(trained(EigenTuneConfig(rank=4)), tmp_path)
     header = json.loads((tmp_path / "eigentune_config.json").read_text())
     for meta in header["layers"].values():
-        meta["signature"] = [v + 1.0 for v in meta["signature"]]
+        meta["sig"] = [v + 1.0 for v in meta["sig"]]
     (tmp_path / "eigentune_config.json").write_text(json.dumps(header))
     with pytest.raises(AdapterMismatchError, match="save_bases=True"):
         load_adapter(tiny(), tmp_path)

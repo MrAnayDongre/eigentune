@@ -30,7 +30,7 @@ def run(dtype, quick, tokens_arg=None, kind="diag"):
     dims = [(4096, 4096), (4096, 11008)] if quick else DIMS
     tokens = tokens_arg or ([1, 16, 128, 2048] if quick else TOKENS)
     ranks = [16] if quick else RANKS
-    for (inn, out) in dims:
+    for inn, out in dims:
         for r in ranks:
             Vh = (torch.randn(r, inn, device=dev) / inn**0.5).to(dtype)
             U = (torch.randn(out, r, device=dev) / r**0.5).to(dtype)
@@ -47,14 +47,26 @@ def run(dtype, quick, tokens_arg=None, kind="diag"):
                     _, Q = b.forward(x, Vh, U, wt, kind, base)
                     fwd = lambda: b.forward(x, Vh, U, wt, kind, base)  # noqa: E731
                     bwd = lambda: b.backward(g, Q, Vh, U, wt, kind, True)  # noqa: E731
-                    row = {"in": inn, "out": out, "rank": r, "tokens": N, "backend": name, "dtype": str(dtype), "kind": kind}
+                    row = {
+                        "in": inn,
+                        "out": out,
+                        "rank": r,
+                        "tokens": N,
+                        "backend": name,
+                        "dtype": str(dtype),
+                        "kind": kind,
+                    }
                     for tag, fn in (("fwd", fwd), ("bwd", bwd)):
                         row[f"{tag}_eager"] = time_gpu(fn)
                         row[f"{tag}_graph"] = time_graph(fn)
                     rows.append(row)
-                    print(f"{inn}x{out} r={r} N={N:5d} {name:7s} fwd eager {row['fwd_eager']['median_us']:7.1f}us "
-                          f"graph {row['fwd_graph']['median_us']:7.1f}us | bwd eager {row['bwd_eager']['median_us']:7.1f}us "
-                          f"graph {row['bwd_graph']['median_us']:7.1f}us", flush=True)
+                    print(
+                        f"{inn}x{out} r={r} N={N:5d} {name:7s} fwd eager {row['fwd_eager']['median_us']:7.1f}us "
+                        f"graph {row['fwd_graph']['median_us']:7.1f}us | "
+                        f"bwd eager {row['bwd_eager']['median_us']:7.1f}us "
+                        f"graph {row['bwd_graph']['median_us']:7.1f}us",
+                        flush=True,
+                    )
     return rows
 
 

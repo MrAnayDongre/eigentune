@@ -8,8 +8,14 @@ from eigentune.kernels import available_backends, get_backend
 DEVICE = "cuda"
 TOL = {torch.float32: (2e-4, 2e-4), torch.float16: (4e-3, 4e-3), torch.bfloat16: (3e-2, 3e-2)}
 # (tokens, in, out, rank): tails, odd sizes, decode-like, prefill-like
-SHAPES = [(1, 64, 48, 4), (5, 130, 77, 8), (16, 256, 192, 16), (33, 1000, 520, 24), (130, 512, 384, 32),
-          (64, 4096, 4096, 16)]
+SHAPES = [
+    (1, 64, 48, 4),
+    (5, 130, 77, 8),
+    (16, 256, 192, 16),
+    (33, 1000, 520, 24),
+    (130, 512, 384, 32),
+    (64, 4096, 4096, 16),
+]
 
 
 def backends():
@@ -100,7 +106,7 @@ def test_deterministic(name):
 def test_noncontiguous_inputs(name):
     N, inn, out, r = 20, 256, 192, 8
     x, base_out, Vh, U, w = make(N, inn, out, r, torch.float16, "diag")
-    xt = torch.randn(inn, N, device=DEVICE).half().T   # strided view
+    xt = torch.randn(inn, N, device=DEVICE).half().T  # strided view
     b, ref = get_backend(name), get_backend("torch")
     y, _ = b.forward(xt, Vh, U, w, "diag", base_out)
     y_ref, _ = ref.forward(xt, Vh, U, w, "diag", base_out)
@@ -110,6 +116,7 @@ def test_noncontiguous_inputs(name):
 @pytest.mark.parametrize("name", backends())
 def test_end_to_end_autograd_matches_reference(name):
     from eigentune.kernels import eigentune_update
+
     N, inn, out, r = 40, 300, 200, 8
     x, base_out, Vh, U, w = make(N, inn, out, r, torch.float32, "diag")
     g = torch.randn(N, out, device=DEVICE)

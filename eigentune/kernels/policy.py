@@ -11,10 +11,10 @@ from typing import List
 
 import torch
 
-NATIVE_FWD_MAX_TOKENS_X_RANK = 128    # native forward wins while tokens * rank is small (launch/latency bound)
-NATIVE_BWD_MAX_TOKENS_X_RANK = 1024   # native fused reduction (diagonal only)
-TRITON_MIN_TOKENS = 2048              # Triton wins once the GEMMs are bandwidth bound
-TRITON_BWD_MIN_RANK_DIAG = 16         # below this the diagonal backward is a coin flip against cuBLAS
+NATIVE_FWD_MAX_TOKENS_X_RANK = 128  # native forward wins while tokens * rank is small (launch/latency bound)
+NATIVE_BWD_MAX_TOKENS_X_RANK = 1024  # native fused reduction (diagonal only)
+TRITON_MIN_TOKENS = 2048  # Triton wins once the GEMMs are bandwidth bound
+TRITON_BWD_MIN_RANK_DIAG = 16  # below this the diagonal backward is a coin flip against cuBLAS
 
 _MEASURED_DTYPES = (torch.bfloat16, torch.float16)
 

@@ -19,16 +19,23 @@ def test_no_hardcoded_nvidia_warp_assumptions():
     assert code.count("__shfl_xor_sync") == 1, "NVIDIA-only shuffles must live in the ET_SHFL_XOR macro only"
     assert "warpSize" in code and "at::cuda::warp_size()" in code
     # no lane arithmetic against a literal 32 in the warp-level kernel
-    kernel = code[code.index("down_partial_kernel"):code.index("up_fused_kernel")]
+    kernel = code[code.index("down_partial_kernel") : code.index("up_fused_kernel")]
     assert "% 32" not in kernel and "/ 32" not in kernel
 
 
 def test_source_hipifies_cleanly(tmp_path):
     hipify = pytest.importorskip("torch.utils.hipify.hipify_python")
     shutil.copy(SRC, tmp_path / SRC.name)
-    res = hipify.hipify(project_directory=str(tmp_path), output_directory=str(tmp_path), header_include_dirs=[],
-                        includes=[str(tmp_path / "*")], extra_files=[str(tmp_path / SRC.name)], show_detailed=False,
-                        is_pytorch_extension=True, hipify_extra_files_only=True)
+    res = hipify.hipify(
+        project_directory=str(tmp_path),
+        output_directory=str(tmp_path),
+        header_include_dirs=[],
+        includes=[str(tmp_path / "*")],
+        extra_files=[str(tmp_path / SRC.name)],
+        show_detailed=False,
+        is_pytorch_extension=True,
+        hipify_extra_files_only=True,
+    )
     assert all(r.status == "[ok]" for r in res.values()), res
     out = (tmp_path / SRC.with_suffix(".hip").name).read_text()
     assert '#include "hip/hip_runtime.h"' in out

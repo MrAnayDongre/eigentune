@@ -122,8 +122,10 @@ def fingerprint(weight: torch.Tensor, cfg: EigenTuneConfig, backend: str) -> str
                 "rank": cfg.rank,
                 "selection": cfg.selection,
                 "backend": backend,
-                "svd": [cfg.svd_oversampling, cfg.svd_niter, cfg.svd_seed] + ([cfg.svd_tol] if backend == "randomized" else [])
-        if backend != "exact" else None,
+                "svd": [cfg.svd_oversampling, cfg.svd_niter, cfg.svd_seed]
+                + ([cfg.svd_tol] if backend == "randomized" else [])
+                if backend != "exact"
+                else None,
             },
             sort_keys=True,
         ).encode()
@@ -156,12 +158,12 @@ def compute_bases(weight: torch.Tensor, cfg: EigenTuneConfig, device: Optional[t
     return bases
 
 
-def basis_signature(bases: Bases, seed: int = 0) -> torch.Tensor:
-    """A few numbers that change if the basis changes: probe the bases with fixed random vectors."""
+def basis_signature(bases: Bases, seed: int = 0, k: int = 4) -> torch.Tensor:
+    """A few numbers that change if the basis changes: the first ``k`` directions probed with fixed random vectors."""
     gen = torch.Generator().manual_seed(seed)
     g = torch.randn(bases.Vh.shape[1], generator=gen)
     h = torch.randn(bases.U.shape[0], generator=gen)
-    return torch.cat([bases.Vh.cpu().float() @ g, bases.U.cpu().float().T @ h])
+    return torch.cat([bases.Vh[:k].cpu().float() @ g, bases.U[:, :k].cpu().float().T @ h])
 
 
 # ----------------------------------------------------------------------------- cache

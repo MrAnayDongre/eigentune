@@ -29,10 +29,12 @@ WEIGHTS = [
     ("model.layers.16.mlp.up_proj.weight", "up_proj 11008x4096"),
 ]
 # (backend, settings, label): the converged randomized solver (the default) against the naive settings it replaces
-STRATEGIES = [("exact", {}, "exact"),
-              ("randomized", {}, "randomized (converged, default)"),
-              ("randomized", {"svd_oversampling": 8, "svd_niter": 4, "svd_tol": 0.0}, "randomized (niter=4, p=8)"),
-              ("lowrank", {"svd_oversampling": 8, "svd_niter": 2}, "torch.svd_lowrank (niter=2)")]
+STRATEGIES = [
+    ("exact", {}, "exact"),
+    ("randomized", {}, "randomized (converged, default)"),
+    ("randomized", {"svd_oversampling": 8, "svd_niter": 4, "svd_tol": 0.0}, "randomized (niter=4, p=8)"),
+    ("lowrank", {"svd_oversampling": 8, "svd_niter": 2}, "torch.svd_lowrank (niter=2)"),
+]
 
 
 def timed(fn, device, reps=3):
@@ -73,14 +75,25 @@ def main():
                     approx = ((b.U * b.S) @ b.Vh).cpu()
                     err = ((approx - ref[0]).norm() / ref[0].norm()).item()
                     sv = ((b.S.cpu() - ref[1]).abs() / ref[1]).max().item()
-                    row = {"weight": label, "rank": r, "device": device, "backend": backend,
-                           "strategy": slabel, "seconds": secs, "peak_mib": peak,
-                           "recon_rel_error": err, "sv_rel_error": sv}
+                    row = {
+                        "weight": label,
+                        "rank": r,
+                        "device": device,
+                        "backend": backend,
+                        "strategy": slabel,
+                        "seconds": secs,
+                        "peak_mib": peak,
+                        "recon_rel_error": err,
+                        "sv_rel_error": sv,
+                    }
                     rows.append(row)
-                    print(f"{label:20s} r={r:3d} {device:4s} {slabel:32s} "
-                          f"{secs:7.3f}s peak={'-' if peak is None else round(peak):>6} MiB  recon_err={err:.2e}  sv_err={sv:.2e}",
-                          flush=True)
-                del W
+                    print(
+                        f"{label:20s} r={r:3d} {device:4s} {slabel:32s} "
+                        f"{secs:7.3f}s peak={'-' if peak is None else round(peak):>6} MiB  "
+                        f"recon_err={err:.2e}  sv_err={sv:.2e}",
+                        flush=True,
+                    )
+                W = None
                 if device == "cuda":
                     torch.cuda.empty_cache()
     print("saved", save(a.out, {"meta": metadata(), "rows": rows}))

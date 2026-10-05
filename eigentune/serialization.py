@@ -19,9 +19,10 @@ from safetensors.torch import load_file, save_file
 from . import __version__
 from .config import FORMAT_VERSION, EigenTuneConfig
 from .model import get_eigentune_model, iter_eigentune_layers, source_fingerprints
-from .svd import Bases, basis_signature
+from .svd import Bases, basis_signature, select_indices
 
 CONFIG_NAME = "eigentune_config.json"
+FP_LEN = 24  # hex chars of the base-weight fingerprint kept in the header (96 bits: a mismatch check, not security)
 WEIGHTS_NAME = "adapter_model.safetensors"
 
 
@@ -42,13 +43,8 @@ def save_adapter(model: nn.Module, path: str, save_bases: bool = False) -> None:
             tensors[f"{name}.Vh"] = layer.Vh.detach().cpu().contiguous()
             tensors[f"{name}.S"] = layer.S.detach().cpu().contiguous()
         sig = basis_signature(Bases(layer.U, layer.S, layer.Vh, layer.indices, layer.fingerprint))
-        meta[name] = {
-            "fingerprint": layer.fingerprint,
-            "indices": list(layer.indices),
-            "shape": [layer.out_features, layer.in_features],
-            "dtype": str(layer.U.dtype),
-            "signature": sig.tolist(),
-        }
+        # compact on purpose: indices, shape and dtype are derivable, and the header must not dwarf the tensors
+        meta[name] = {"fp": layer.fingerprint[:FP_LEN], "sig": [round(v, 5) for v in sig.tolist()]}
     cfg: EigenTuneConfig = model.eigentune_config
     header = {
         "format_version": FORMAT_VERSION,
@@ -60,7 +56,7 @@ def save_adapter(model: nn.Module, path: str, save_bases: bool = False) -> None:
     }
     save_file(tensors, os.path.join(path, WEIGHTS_NAME))
     with open(os.path.join(path, CONFIG_NAME), "w") as f:
-        json.dump(header, f, indent=2)
+        json.dump(header, f, separators=(",", ":"))
 
 
 def _read_header(path: str) -> dict:
@@ -89,7 +85,7 @@ def load_adapter(
     expected = source_fingerprints(model, cfg, weights)
     if set(expected) != set(meta):
         raise AdapterMismatchError(f"adapter layers {sorted(set(meta) ^ set(expected))[:5]} differ from the model's")
-    wrong = [n for n in meta if expected[n] != meta[n]["fingerprint"]]
+    wrong = [n for n in meta if expected[n][:FP_LEN] != meta[n]["fp"]]
     if wrong:
         raise AdapterMismatchError(
             f"{len(wrong)} layer(s), e.g. {wrong[0]}, have different base weights or SVD settings than the adapter "
@@ -103,14 +99,14 @@ def load_adapter(
                 tensors[f"{n}.U"],
                 tensors[f"{n}.S"],
                 tensors[f"{n}.Vh"],
-                tuple(meta[n]["indices"]),
-                meta[n]["fingerprint"],
+                select_indices(min(tensors[f"{n}.U"].shape[0], tensors[f"{n}.Vh"].shape[1]), cfg.rank, cfg.selection),
+                expected[n],
             )
             for n in meta
         }
     get_eigentune_model(model, cfg, weights, bases=embedded)
     for name, layer in iter_eigentune_layers(model):
-        sig = torch.tensor(meta[name]["signature"])
+        sig = torch.tensor(meta[name]["sig"])
         now = basis_signature(Bases(layer.U, layer.S, layer.Vh, layer.indices, layer.fingerprint))
         if embedded is None and float((sig - now).abs().max()) > signature_tol * max(1.0, float(sig.abs().max())):
             raise AdapterMismatchError(

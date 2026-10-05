@@ -24,33 +24,81 @@ MAX_RANK_CORE = 64
 
 
 @triton.jit
-def _down_kernel(a_ptr, b_ptr, out_ptr, N, K, R, sam, sak, sbk, sbr, som, sor,
-                 BM: tl.constexpr, BK: tl.constexpr, BR: tl.constexpr, PREC: tl.constexpr):
+def _down_kernel(
+    a_ptr,
+    b_ptr,
+    out_ptr,
+    N,
+    K,
+    R,
+    sam,
+    sak,
+    sbk,
+    sbr,
+    som,
+    sor,
+    BM: tl.constexpr,
+    BK: tl.constexpr,
+    BR: tl.constexpr,
+    PREC: tl.constexpr,
+):
     rm = tl.program_id(0) * BM + tl.arange(0, BM)
     rr = tl.arange(0, BR)
     acc = tl.zeros((BM, BR), tl.float32)
     for k0 in range(0, K, BK):
         rk = k0 + tl.arange(0, BK)
-        a = tl.load(a_ptr + rm[:, None] * sam + rk[None, :] * sak, mask=(rm[:, None] < N) & (rk[None, :] < K), other=0.0)
-        b = tl.load(b_ptr + rk[:, None] * sbk + rr[None, :] * sbr, mask=(rk[:, None] < K) & (rr[None, :] < R), other=0.0)
+        a = tl.load(
+            a_ptr + rm[:, None] * sam + rk[None, :] * sak, mask=(rm[:, None] < N) & (rk[None, :] < K), other=0.0
+        )
+        b = tl.load(
+            b_ptr + rk[:, None] * sbk + rr[None, :] * sbr, mask=(rk[:, None] < K) & (rr[None, :] < R), other=0.0
+        )
         acc = tl.dot(a, b, acc, input_precision=PREC)
-    tl.store(out_ptr + rm[:, None] * som + rr[None, :] * sor, acc.to(out_ptr.dtype.element_ty),
-             mask=(rm[:, None] < N) & (rr[None, :] < R))
+    tl.store(
+        out_ptr + rm[:, None] * som + rr[None, :] * sor,
+        acc.to(out_ptr.dtype.element_ty),
+        mask=(rm[:, None] < N) & (rr[None, :] < R),
+    )
 
 
 @triton.jit
-def _up_kernel(z_ptr, w_ptr, b_ptr, base_ptr, out_ptr, N, M, R, szm, szr, swr, swc, sbn, sbr, sbasem, sbasen, som, son,
-               KIND: tl.constexpr, HAS_BASE: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BR: tl.constexpr,
-               PREC: tl.constexpr):
+def _up_kernel(
+    z_ptr,
+    w_ptr,
+    b_ptr,
+    base_ptr,
+    out_ptr,
+    N,
+    M,
+    R,
+    szm,
+    szr,
+    swr,
+    swc,
+    sbn,
+    sbr,
+    sbasem,
+    sbasen,
+    som,
+    son,
+    KIND: tl.constexpr,
+    HAS_BASE: tl.constexpr,
+    BM: tl.constexpr,
+    BN: tl.constexpr,
+    BR: tl.constexpr,
+    PREC: tl.constexpr,
+):
     rm = tl.program_id(0) * BM + tl.arange(0, BM)
     rn = tl.program_id(1) * BN + tl.arange(0, BN)
     rr = tl.arange(0, BR)
     z = tl.load(z_ptr + rm[:, None] * szm + rr[None, :] * szr, mask=(rm[:, None] < N) & (rr[None, :] < R), other=0.0)
-    if KIND == 0:      # diagonal: Z * w
+    if KIND == 0:  # diagonal: Z * w
         w = tl.load(w_ptr + rr * swr, mask=rr < R, other=0.0)
         z = (z.to(tl.float32) * w.to(tl.float32)[None, :]).to(z_ptr.dtype.element_ty)
-    elif KIND == 1:    # core: Z @ w^T
-        wt = tl.load(w_ptr + rr[:, None] * swc + rr[None, :] * swr, mask=(rr[:, None] < R) & (rr[None, :] < R), other=0.0)
+    elif KIND == 1:  # core: Z @ w^T
+        wt = tl.load(
+            w_ptr + rr[:, None] * swc + rr[None, :] * swr, mask=(rr[:, None] < R) & (rr[None, :] < R), other=0.0
+        )
         z = tl.dot(z, wt.to(z_ptr.dtype.element_ty), input_precision=PREC).to(z_ptr.dtype.element_ty)
     b = tl.load(b_ptr + rr[:, None] * sbr + rn[None, :] * sbn, mask=(rr[:, None] < R) & (rn[None, :] < M), other=0.0)
     acc = tl.dot(z, b, input_precision=PREC)
@@ -61,33 +109,65 @@ def _up_kernel(z_ptr, w_ptr, b_ptr, base_ptr, out_ptr, N, M, R, szm, szr, swr, s
 
 
 @triton.jit
-def _bwd_down_kernel(g_ptr, u_ptr, q_ptr, w_ptr, gq_ptr, gw_ptr, N, M, R, sgm, sgk, suk, sur, sqm, sqr, swr, swc, sgqm,
-                     sgqr, KIND: tl.constexpr, BM: tl.constexpr, BK: tl.constexpr, BR: tl.constexpr,
-                     PREC: tl.constexpr):
+def _bwd_down_kernel(
+    g_ptr,
+    u_ptr,
+    q_ptr,
+    w_ptr,
+    gq_ptr,
+    gw_ptr,
+    N,
+    M,
+    R,
+    sgm,
+    sgk,
+    suk,
+    sur,
+    sqm,
+    sqr,
+    swr,
+    swc,
+    sgqm,
+    sgqr,
+    KIND: tl.constexpr,
+    BM: tl.constexpr,
+    BK: tl.constexpr,
+    BR: tl.constexpr,
+    PREC: tl.constexpr,
+):
     pid = tl.program_id(0)
     rm = pid * BM + tl.arange(0, BM)
     rr = tl.arange(0, BR)
     acc = tl.zeros((BM, BR), tl.float32)
     for k0 in range(0, M, BK):
         rk = k0 + tl.arange(0, BK)
-        g = tl.load(g_ptr + rm[:, None] * sgm + rk[None, :] * sgk, mask=(rm[:, None] < N) & (rk[None, :] < M), other=0.0)
-        u = tl.load(u_ptr + rk[:, None] * suk + rr[None, :] * sur, mask=(rk[:, None] < M) & (rr[None, :] < R), other=0.0)
-        acc = tl.dot(g, u, acc, input_precision=PREC)               # P = G @ U  (fp32)
+        g = tl.load(
+            g_ptr + rm[:, None] * sgm + rk[None, :] * sgk, mask=(rm[:, None] < N) & (rk[None, :] < M), other=0.0
+        )
+        u = tl.load(
+            u_ptr + rk[:, None] * suk + rr[None, :] * sur, mask=(rk[:, None] < M) & (rr[None, :] < R), other=0.0
+        )
+        acc = tl.dot(g, u, acc, input_precision=PREC)  # P = G @ U  (fp32)
     q = tl.load(q_ptr + rm[:, None] * sqm + rr[None, :] * sqr, mask=(rm[:, None] < N) & (rr[None, :] < R), other=0.0)
     q32 = q.to(tl.float32)
     if KIND == 0:
         w = tl.load(w_ptr + rr * swr, mask=rr < R, other=0.0).to(tl.float32)
-        tl.store(gw_ptr + pid * BR + rr, tl.sum(q32 * acc, axis=0))      # partial grad_w for this block of rows
+        tl.store(gw_ptr + pid * BR + rr, tl.sum(q32 * acc, axis=0))  # partial grad_w for this block of rows
         gq = acc * w[None, :]
     else:
         # dL/dC = P^T Q;  gQ = P @ C
         part = tl.dot(tl.trans(acc), q32, input_precision="ieee")
         ri = tl.arange(0, BR)
         tl.store(gw_ptr + pid * BR * BR + ri[:, None] * BR + rr[None, :], part)
-        wm = tl.load(w_ptr + rr[:, None] * swr + rr[None, :] * swc, mask=(rr[:, None] < R) & (rr[None, :] < R), other=0.0)
+        wm = tl.load(
+            w_ptr + rr[:, None] * swr + rr[None, :] * swc, mask=(rr[:, None] < R) & (rr[None, :] < R), other=0.0
+        )
         gq = tl.dot(acc, wm.to(tl.float32), input_precision="ieee")
-    tl.store(gq_ptr + rm[:, None] * sgqm + rr[None, :] * sgqr, gq.to(gq_ptr.dtype.element_ty),
-             mask=(rm[:, None] < N) & (rr[None, :] < R))
+    tl.store(
+        gq_ptr + rm[:, None] * sgqm + rr[None, :] * sgqr,
+        gq.to(gq_ptr.dtype.element_ty),
+        mask=(rm[:, None] < N) & (rr[None, :] < R),
+    )
 
 
 def _prec(t: torch.Tensor) -> str:
@@ -113,8 +193,24 @@ def down(a: torch.Tensor, b: torch.Tensor, b_k_dim: int) -> torch.Tensor:
     out = torch.empty(N, R, device=a.device, dtype=a.dtype)
     BM = _block_m(N)
     _down_kernel[(triton.cdiv(N, BM),)](
-        a, b, out, N, K, R, a.stride(0), a.stride(1), b.stride(b_k_dim), b.stride(1 - b_k_dim), out.stride(0),
-        out.stride(1), BM=BM, BK=_block_k(K), BR=_pad_rank(R), PREC=_prec(a), num_warps=4)
+        a,
+        b,
+        out,
+        N,
+        K,
+        R,
+        a.stride(0),
+        a.stride(1),
+        b.stride(b_k_dim),
+        b.stride(1 - b_k_dim),
+        out.stride(0),
+        out.stride(1),
+        BM=BM,
+        BK=_block_k(K),
+        BR=_pad_rank(R),
+        PREC=_prec(a),
+        num_warps=4,
+    )
     return out
 
 
@@ -128,9 +224,32 @@ def up(z: torch.Tensor, w: torch.Tensor, b: torch.Tensor, b_n_dim: int, kind: st
     swr = w.stride(0) if w.dim() else 0
     swc = w.stride(1) if w.dim() == 2 else 0
     _up_kernel[(triton.cdiv(N, BM), triton.cdiv(M, 128))](
-        z, w, b, base_t, out, N, M, R, z.stride(0), z.stride(1), swr, swc, b.stride(b_n_dim), b.stride(1 - b_n_dim),
-        base_t.stride(0), base_t.stride(1), out.stride(0), out.stride(1), KIND=_KINDS[kind],
-        HAS_BASE=base is not None, BM=BM, BN=128, BR=_pad_rank(R), PREC=_prec(z), num_warps=4)
+        z,
+        w,
+        b,
+        base_t,
+        out,
+        N,
+        M,
+        R,
+        z.stride(0),
+        z.stride(1),
+        swr,
+        swc,
+        b.stride(b_n_dim),
+        b.stride(1 - b_n_dim),
+        base_t.stride(0),
+        base_t.stride(1),
+        out.stride(0),
+        out.stride(1),
+        KIND=_KINDS[kind],
+        HAS_BASE=base is not None,
+        BM=BM,
+        BN=128,
+        BR=_pad_rank(R),
+        PREC=_prec(z),
+        num_warps=4,
+    )
     return out
 
 
@@ -149,7 +268,7 @@ class TritonBackend:
 
     def forward(self, x, Vh, U, w, kind, base_out):
         x = x if x.stride(1) == 1 else x.contiguous()
-        Q = down(x, Vh, b_k_dim=1)                                  # [N, r] = X Vh^T
+        Q = down(x, Vh, b_k_dim=1)  # [N, r] = X Vh^T
         base_out = base_out if base_out.stride(1) == 1 else base_out.contiguous()
         return up(Q, w, U, b_n_dim=0, kind=kind, base=base_out), Q  # base + scale(Q) U^T
 
@@ -163,9 +282,32 @@ class TritonBackend:
         swr = w.stride(0)
         swc = w.stride(1) if w.dim() == 2 else 0
         _bwd_down_kernel[(blocks,)](
-            g, U, Q, w, gq, part, N, U.shape[0], R, g.stride(0), g.stride(1), U.stride(0), U.stride(1), Q.stride(0),
-            Q.stride(1), swr, swc, gq.stride(0), gq.stride(1), KIND=0 if kind == "diag" else 1, BM=BM,
-            BK=_block_k(U.shape[0]), BR=BR, PREC=_prec(g), num_warps=4)
+            g,
+            U,
+            Q,
+            w,
+            gq,
+            part,
+            N,
+            U.shape[0],
+            R,
+            g.stride(0),
+            g.stride(1),
+            U.stride(0),
+            U.stride(1),
+            Q.stride(0),
+            Q.stride(1),
+            swr,
+            swc,
+            gq.stride(0),
+            gq.stride(1),
+            KIND=0 if kind == "diag" else 1,
+            BM=BM,
+            BK=_block_k(U.shape[0]),
+            BR=BR,
+            PREC=_prec(g),
+            num_warps=4,
+        )
         if kind == "diag":
             gw = part.sum(0)[:R]
         else:
