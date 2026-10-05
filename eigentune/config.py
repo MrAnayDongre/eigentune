@@ -26,9 +26,14 @@ class EigenTuneConfig:
     (``0`` is classic EigenTune, ``None`` is a dense core).
 
     Both start at zero, so the adapted model is identical to the base model at step 0.
+
+    ``rank_budget`` (experimental, ``selection="principal"`` only) turns ``rank`` into a per-layer maximum and
+    spends a global budget of singular directions where they carry the most spectral energy
+    (``sigma_i^2 / ||W||_F^2``), instead of giving every layer the same rank.
     """
 
     rank: int = 8
+    rank_budget: Optional[int] = None
     target_modules: Optional[Union[List[str], str]] = None
     exclude_modules: List[str] = field(default_factory=lambda: ["lm_head"])
     method: str = "diagonal"
@@ -55,6 +60,8 @@ class EigenTuneConfig:
         ):
             if getattr(self, name) not in allowed:
                 raise ValueError(f"{name}={getattr(self, name)!r} is not one of {allowed}")
+        if self.rank_budget is not None and (self.rank_budget < 1 or self.selection != "principal"):
+            raise ValueError("rank_budget needs a positive value and selection='principal'")
         if self.core_bandwidth is not None and self.core_bandwidth < 0:
             raise ValueError("core_bandwidth must be >= 0 or None")
         if self.method == "diagonal" and self.core_bandwidth not in (None, 0):

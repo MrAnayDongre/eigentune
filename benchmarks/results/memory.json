@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "git_sha": "75eaff5",
+    "eigentune": "0.2.0.dev0",
+    "torch": "2.13.0+cu130",
+    "triton": "3.7.1",
+    "cuda": "13.0",
+    "hip": null,
+    "gpu": "cpu",
+    "python": "3.10.20",
+    "date": "2026-10-04"
+  },
+  "rows": [
+    {
+      "tokens": 256,
+      "rank": 8,
+      "input_mib": 2.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.0039215087890625,
+      "eigentune_core": 0.0040283203125,
+      "lora": 4.0078125,
+      "lora_bf16": 2.00390625,
+      "dora": 74.1796875
+    },
+    {
+      "tokens": 256,
+      "rank": 16,
+      "input_mib": 2.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.007843017578125,
+      "eigentune_core": 0.00830078125,
+      "lora": 4.015625,
+      "lora_bf16": 2.0078125,
+      "dora": 74.3125
+    },
+    {
+      "tokens": 2048,
+      "rank": 8,
+      "input_mib": 16.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.0312652587890625,
+      "eigentune_core": 0.0313720703125,
+      "lora": 32.0625,
+      "lora_bf16": 16.03125,
+      "dora": 144.234375
+    },
+    {
+      "tokens": 2048,
+      "rank": 16,
+      "input_mib": 16.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.062530517578125,
+      "eigentune_core": 0.06298828125,
+      "lora": 32.125,
+      "lora_bf16": 16.0625,
+      "dora": 144.421875
+    },
+    {
+      "tokens": 8192,
+      "rank": 8,
+      "input_mib": 64.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.1250152587890625,
+      "eigentune_core": 0.1251220703125,
+      "lora": 128.25,
+      "lora_bf16": 64.125,
+      "dora": 384.421875
+    },
+    {
+      "tokens": 8192,
+      "rank": 16,
+      "input_mib": 64.0,
+      "frozen": 0.0,
+      "eigentune_diag": 0.250030517578125,
+      "eigentune_core": 0.25048828125,
+      "lora": 128.5,
+      "lora_bf16": 64.25,
+      "dora": 384.796875
+    }
+  ]
+}

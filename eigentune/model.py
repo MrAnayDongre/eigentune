@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from .config import EigenTuneConfig
 from .layers import EigenTuneLinear
-from .svd import Bases, compute_bases, fingerprint, resolve_backend
+from .svd import Bases, allocate_ranks, compute_bases, fingerprint, resolve_backend, truncate
 
 
 def _is_linear(module: nn.Module) -> bool:
@@ -48,6 +48,7 @@ def get_eigentune_model(
     *,
     full_precision_state_dict: Optional[Mapping[str, torch.Tensor]] = None,
     bases: Optional[Mapping[str, Bases]] = None,
+    ranks: Optional[Mapping[str, int]] = None,
 ) -> nn.Module:
     """Freeze ``model`` and wrap its target linear layers with trainable EigenTune adapters, in place.
 
@@ -58,13 +59,14 @@ def get_eigentune_model(
             cannot be decomposed (quantized bases). Defaults to each layer's own weight.
         full_precision_state_dict: deprecated alias of ``weights`` (the 0.1 argument name).
         bases: precomputed bases per layer name (used when loading adapters that embed them).
+        ranks: per-layer ranks (used when loading adapters trained with ``rank_budget``).
     """
     cfg = config or EigenTuneConfig()
     if full_precision_state_dict is not None:
         warnings.warn("full_precision_state_dict is deprecated; pass weights=", DeprecationWarning, stacklevel=2)
         weights = weights or full_precision_state_dict
     model.requires_grad_(False)
-    adapted = 0
+    targets = []
     for name, module in list(model.named_modules()):
         if not name or not _is_linear(module) or not _matches(name, cfg):
             continue
@@ -75,13 +77,23 @@ def get_eigentune_model(
                 f"cannot decompose {name}: its weight is {tuple(w.shape)} {w.dtype} (quantized?). "
                 f"Pass weights={{'{key}': full_precision_weight}}."
             )
-        b = bases[name] if bases is not None and name in bases else compute_bases(w, cfg)
+        targets.append((name, module, w))
+    if not targets:
+        raise ValueError("no linear layer matched target_modules; nothing was adapted")
+    computed = {n: bases[n] if bases is not None and n in bases else compute_bases(w, cfg) for n, _, w in targets}
+    if cfg.rank_budget is not None and ranks is None:
+        ranks = allocate_ranks(
+            {n: b.S for n, b in computed.items()},
+            {n: float(w.detach().float().pow(2).sum()) for n, _, w in targets},
+            cfg.rank_budget,
+        )
+    for name, module, w in targets:
+        b = computed[name]
+        if ranks is not None and ranks[name] < b.U.shape[1]:
+            b = truncate(b, ranks[name])
         parent_name, _, child = name.rpartition(".")
         parent = model.get_submodule(parent_name) if parent_name else model
         setattr(parent, child, EigenTuneLinear(module, b, cfg, name=name, dtype=w.dtype))
-        adapted += 1
-    if adapted == 0:
-        raise ValueError("no linear layer matched target_modules; nothing was adapted")
     model.eigentune_config = cfg
     return model
 

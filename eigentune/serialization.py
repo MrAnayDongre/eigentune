@@ -36,6 +36,7 @@ def save_adapter(model: nn.Module, path: str, save_bases: bool = False) -> None:
         raise ValueError("model has no EigenTune layers")
     os.makedirs(path, exist_ok=True)
     tensors, meta = {}, {}
+    cfg_rank_budget = model.eigentune_config.rank_budget is not None
     for name, layer in layers.items():
         tensors[f"{name}.{'delta' if layer.kind == 'diag' else 'core'}"] = layer.trainable().detach().cpu().contiguous()
         if save_bases:
@@ -45,6 +46,8 @@ def save_adapter(model: nn.Module, path: str, save_bases: bool = False) -> None:
         sig = basis_signature(Bases(layer.U, layer.S, layer.Vh, layer.indices, layer.fingerprint))
         # compact on purpose: indices, shape and dtype are derivable, and the header must not dwarf the tensors
         meta[name] = {"fp": layer.fingerprint[:FP_LEN], "sig": [round(v, 5) for v in sig.tolist()]}
+        if cfg_rank_budget:
+            meta[name]["r"] = layer.rank
     cfg: EigenTuneConfig = model.eigentune_config
     header = {
         "format_version": FORMAT_VERSION,
@@ -99,12 +102,17 @@ def load_adapter(
                 tensors[f"{n}.U"],
                 tensors[f"{n}.S"],
                 tensors[f"{n}.Vh"],
-                select_indices(min(tensors[f"{n}.U"].shape[0], tensors[f"{n}.Vh"].shape[1]), cfg.rank, cfg.selection),
+                select_indices(
+                    min(tensors[f"{n}.U"].shape[0], tensors[f"{n}.Vh"].shape[1]),
+                    tensors[f"{n}.U"].shape[1],
+                    cfg.selection,
+                ),
                 expected[n],
             )
             for n in meta
         }
-    get_eigentune_model(model, cfg, weights, bases=embedded)
+    ranks = {n: m["r"] for n, m in meta.items()} if cfg.rank_budget is not None else None
+    get_eigentune_model(model, cfg, weights, bases=embedded, ranks=ranks)
     for name, layer in iter_eigentune_layers(model):
         sig = torch.tensor(meta[name]["sig"])
         now = basis_signature(Bases(layer.U, layer.S, layer.Vh, layer.indices, layer.fingerprint))

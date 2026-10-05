@@ -158,6 +158,26 @@ def compute_bases(weight: torch.Tensor, cfg: EigenTuneConfig, device: Optional[t
     return bases
 
 
+def truncate(b: Bases, k: int) -> Bases:
+    """The first ``k`` directions of a principal basis (the rest of the adapter is unchanged)."""
+    return Bases(b.U[:, :k].contiguous(), b.S[:k].contiguous(), b.Vh[:k].contiguous(), b.indices[:k], b.fingerprint)
+
+
+def allocate_ranks(spectra: Dict[str, torch.Tensor], energy: Dict[str, float], budget: int) -> Dict[str, int]:
+    """Spend ``budget`` singular directions across layers by ``sigma_i^2 / ||W||_F^2``, at least one per layer.
+
+    Each layer's spectrum is sorted descending, so the globally best components form a prefix in every layer.
+    """
+    ranks = {n: 1 for n in spectra}
+    scored = sorted(
+        ((float(s) ** 2 / energy[n], n, i) for n, S in spectra.items() for i, s in enumerate(S) if i > 0),
+        reverse=True,
+    )
+    for _, n, _i in scored[: max(0, budget - len(spectra))]:
+        ranks[n] += 1
+    return ranks
+
+
 def basis_signature(bases: Bases, seed: int = 0, k: int = 4) -> torch.Tensor:
     """A few numbers that change if the basis changes: the first ``k`` directions probed with fixed random vectors."""
     gen = torch.Generator().manual_seed(seed)
