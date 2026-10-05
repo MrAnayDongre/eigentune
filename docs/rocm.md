@@ -27,8 +27,8 @@ On a ROCm build of PyTorch, `eigentune` imports and runs on the `torch` backend,
 accelerated paths explicitly:
 
 ```python
-EigenTuneConfig(rank=16, backend="triton")   # Triton on ROCm: untested here
-EigenTuneConfig(rank=16, backend="native")   # builds the HIP extension on first use: untested here
+EigenTuneConfig(rank=16, backend="triton")  # Triton on ROCm: untested here
+EigenTuneConfig(rank=16, backend="native")  # builds the HIP extension on first use: untested here
 ```
 
 If either cannot run, the call falls back to `torch` instead of failing. `auto` will not pick them on ROCm until someone

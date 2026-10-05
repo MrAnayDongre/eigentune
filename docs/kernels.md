@@ -43,13 +43,16 @@ other hardware.
 ```python
 from eigentune.kernels import register_backend
 
+
 class MyBackend:
     name = "mine"
+
     def available(self): ...
-    def supports(self, x, rank, kind): ...        # forward: x is [N, in]; kind is "diag" or "core"
-    def supports_bwd(self, q, rank, kind): ...    # backward: q is [N, r]
-    def forward(self, x, Vh, U, w, kind, base_out): ...   # -> (y, Q)
-    def backward(self, g, Q, Vh, U, w, kind, need_x): ... # -> (grad_x or None, grad_w)
+    def supports(self, x, rank, kind): ...  # forward: x is [N, in]; kind is "diag" or "core"
+    def supports_bwd(self, q, rank, kind): ...  # backward: q is [N, r]
+    def forward(self, x, Vh, U, w, kind, base_out): ...  # -> (y, Q)
+    def backward(self, g, Q, Vh, U, w, kind, need_x): ...  # -> (grad_x or None, grad_w)
+
 
 register_backend(MyBackend())
 ```
