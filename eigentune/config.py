@@ -36,8 +36,9 @@ class EigenTuneConfig:
     selection: str = "principal"
     update: str = "additive"
     svd_backend: str = "auto"
-    svd_oversampling: int = 8
-    svd_niter: int = 2
+    svd_oversampling: int = 32
+    svd_niter: int = 100  # cap on subspace iterations; the randomized solver stops earlier once converged
+    svd_tol: float = 1e-4  # stop when the rank-r subspace moves less than this between checks
     svd_seed: int = 0
     backend: str = "auto"
     cache_dir: Optional[str] = None

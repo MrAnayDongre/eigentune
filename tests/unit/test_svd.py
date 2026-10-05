@@ -98,3 +98,38 @@ def test_repeated_singular_values_warn():
     W = torch.eye(8)  # every singular value is 1: no spectral gap
     with pytest.warns(UserWarning, match="repeated"):
         compute_bases(W, EigenTuneConfig(rank=3))
+
+
+def slowly_decaying(out=300, inn=240, power=0.3, seed=0):
+    """Singular values decaying like i^-0.3, like real LLM weights: the hard case for randomized SVD."""
+    g = torch.Generator().manual_seed(seed)
+    k = min(out, inn)
+    U = torch.linalg.qr(torch.randn(out, k, generator=g))[0]
+    V = torch.linalg.qr(torch.randn(inn, k, generator=g))[0]
+    S = (torch.arange(k) + 1.0) ** -power
+    return (U * S) @ V.T
+
+
+def test_converged_randomized_svd_is_accurate_where_a_fixed_few_iterations_are_not():
+    W = slowly_decaying()
+    ex = compute_bases(W, EigenTuneConfig(rank=8, svd_backend="exact"))
+    exact = (ex.U * ex.S) @ ex.Vh
+
+    def err(**kw):
+        b = compute_bases(W, EigenTuneConfig(rank=8, svd_backend="randomized", **kw))
+        return ((((b.U * b.S) @ b.Vh) - exact).norm() / exact.norm()).item()
+
+    naive = err(svd_oversampling=8, svd_niter=2, svd_tol=0.0)
+    converged = err()
+    assert naive > 0.1, "the regression this guards against: few fixed iterations are inaccurate on slow decay"
+    assert converged < 1e-2
+
+
+def test_randomized_stops_early_once_converged(monkeypatch):
+    import eigentune.svd as svd
+
+    calls = []
+    real = torch.linalg.qr
+    monkeypatch.setattr(svd.torch.linalg, "qr", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    svd._randomized(slowly_decaying(), 8, 32, 200, 0, 1e-4)
+    assert len(calls) < 1 + 2 * 200  # far fewer than the cap allows
