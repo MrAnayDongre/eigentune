@@ -83,3 +83,10 @@ nosetests.xml
 coverage.xml
 *.cover
 .pytest_cache/
+# build and tooling
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
