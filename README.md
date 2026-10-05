@@ -28,13 +28,13 @@ The native CUDA kernels are built on first use if `nvcc` is available, and silen
 ```python
 from eigentune import EigenTuneConfig, get_eigentune_model, print_trainable_parameters, save_adapter, load_adapter
 
-cfg = EigenTuneConfig(rank=16, target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])   # method="diagonal"
-model = get_eigentune_model(model, cfg)       # freezes the model, adapts it in place; works with Trainer or any loop
+cfg = EigenTuneConfig(rank=16, target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])  # method="diagonal"
+model = get_eigentune_model(model, cfg)  # freezes the model, adapts it in place; works with Trainer or any loop
 print_trainable_parameters(model)
 
 # ... train as usual: only the per-direction scales have gradients ...
 
-save_adapter(model, "my-adapter")             # a few tens of KB
+save_adapter(model, "my-adapter")  # a few tens of KB
 load_adapter(fresh_base_model, "my-adapter")  # refuses to load against different base weights
 ```
 
@@ -121,9 +121,9 @@ part of a step). Tables, including the regimes where each backend loses, are in 
 ```python
 from eigentune import merge_and_unload, merge_adapter, unmerge_adapter
 
-merge_adapter(model)           # fold the update into the base weights (exact in fp32)
+merge_adapter(model)  # fold the update into the base weights (exact in fp32)
 unmerge_adapter(model)
-model = merge_and_unload(model)   # a plain model again: normal state_dict keys, save_pretrained works
+model = merge_and_unload(model)  # a plain model again: normal state_dict keys, save_pretrained works
 ```
 
 An adapted model's own `state_dict()` has wrapper keys, so Trainer's built-in checkpoints are not loadable with a stock `from_pretrained`.
