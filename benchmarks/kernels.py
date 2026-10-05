@@ -23,31 +23,31 @@ TOKENS = [1, 4, 16, 64, 128, 512, 2048]
 RANKS = [8, 16, 64]
 
 
-def run(dtype, quick):
+def run(dtype, quick, tokens_arg=None, kind="diag"):
     dev = "cuda"
     rows = []
     names = available_backends()
     dims = [(4096, 4096), (4096, 11008)] if quick else DIMS
-    tokens = [1, 16, 128, 2048] if quick else TOKENS
+    tokens = tokens_arg or ([1, 16, 128, 2048] if quick else TOKENS)
     ranks = [16] if quick else RANKS
     for (inn, out) in dims:
         for r in ranks:
             Vh = (torch.randn(r, inn, device=dev) / inn**0.5).to(dtype)
             U = (torch.randn(out, r, device=dev) / r**0.5).to(dtype)
-            w = torch.randn(r, device=dev)
+            w = torch.randn(r, device=dev) if kind == "diag" else torch.randn(r, r, device=dev) / r**0.5
             for N in tokens:
                 x = torch.randn(N, inn, device=dev).to(dtype)
                 base = torch.randn(N, out, device=dev).to(dtype)
                 g = torch.randn(N, out, device=dev).to(dtype)
                 for name in names:
                     b = get_backend(name)
-                    if not b.supports(x, r, "diag"):
+                    if not b.supports(x, r, kind):
                         continue
                     wt = w.to(dtype)
-                    _, Q = b.forward(x, Vh, U, wt, "diag", base)
-                    fwd = lambda: b.forward(x, Vh, U, wt, "diag", base)  # noqa: E731
-                    bwd = lambda: b.backward(g, Q, Vh, U, wt, "diag", True)  # noqa: E731
-                    row = {"in": inn, "out": out, "rank": r, "tokens": N, "backend": name, "dtype": str(dtype)}
+                    _, Q = b.forward(x, Vh, U, wt, kind, base)
+                    fwd = lambda: b.forward(x, Vh, U, wt, kind, base)  # noqa: E731
+                    bwd = lambda: b.backward(g, Q, Vh, U, wt, kind, True)  # noqa: E731
+                    row = {"in": inn, "out": out, "rank": r, "tokens": N, "backend": name, "dtype": str(dtype), "kind": kind}
                     for tag, fn in (("fwd", fwd), ("bwd", bwd)):
                         row[f"{tag}_eager"] = time_gpu(fn)
                         row[f"{tag}_graph"] = time_graph(fn)
@@ -63,9 +63,11 @@ def main():
     ap.add_argument("--out", default="kernels")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--dtype", default="bfloat16")
+    ap.add_argument("--kind", default="diag", choices=["diag", "core"])
+    ap.add_argument("--tokens", type=int, nargs="*", help="override the token counts")
     a = ap.parse_args()
     assert torch.cuda.is_available(), "this benchmark needs a GPU"
-    rows = run(getattr(torch, a.dtype), a.quick)
+    rows = run(getattr(torch, a.dtype), a.quick, a.tokens, a.kind)
     print("saved", save(a.out, {"meta": metadata(), "rows": rows}))
 
 

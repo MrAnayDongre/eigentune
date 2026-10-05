@@ -12,6 +12,7 @@ class Backend(Protocol):
 
     def available(self) -> bool: ...
     def supports(self, x: torch.Tensor, rank: int, kind: str) -> bool: ...
+    def supports_bwd(self, q: torch.Tensor, rank: int, kind: str) -> bool: ...
     def forward(self, x, Vh, U, w, kind, base_out): ...
     def backward(self, g, Q, Vh, U, w, kind, need_x): ...
 
@@ -34,19 +35,25 @@ def available_backends() -> List[str]:
     return [n for n, b in _REGISTRY.items() if b.available()]
 
 
-def select_backend(requested: str, x: torch.Tensor, rank: int, kind: str) -> Backend:
+def _ok(b: Backend, x: torch.Tensor, rank: int, kind: str, phase: str) -> bool:
+    check = getattr(b, "supports_bwd", None) if phase == "bwd" else None
+    return b.available() and (check or b.supports)(x, rank, kind)
+
+
+def select_backend(requested: str, x: torch.Tensor, rank: int, kind: str, phase: str = "fwd") -> Backend:
     """Resolve ``requested`` (a name or ``"auto"``) to a backend that can run this call.
 
-    A named backend that cannot run the call falls back to ``torch`` rather than failing; ``auto``
-    picks the accelerator only where benchmarks showed it wins (see ``eigentune.kernels.policy``).
+    A named backend that cannot run the call falls back to ``torch`` rather than failing; ``auto`` follows
+    ``eigentune.kernels.policy`` (benchmark-derived). ``x`` is the ``[N, in]`` input for ``phase="fwd"`` and the
+    ``[N, r]`` activation for ``phase="bwd"``.
     """
     from . import policy
 
     if requested == "auto":
-        for name in policy.preference(x, rank, kind):
+        for name in policy.preference(x, rank, kind, phase):
             b = _REGISTRY.get(name)
-            if b is not None and b.available() and b.supports(x, rank, kind):
+            if b is not None and _ok(b, x, rank, kind, phase):
                 return b
         return _REGISTRY["torch"]
     b = get_backend(requested)
-    return b if b.available() and b.supports(x, rank, kind) else _REGISTRY["torch"]
+    return b if _ok(b, x, rank, kind, phase) else _REGISTRY["torch"]

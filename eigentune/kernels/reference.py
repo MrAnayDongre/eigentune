@@ -16,6 +16,9 @@ class TorchBackend:
     def supports(self, x: torch.Tensor, rank: int, kind: str) -> bool:
         return True
 
+    def supports_bwd(self, q: torch.Tensor, rank: int, kind: str) -> bool:
+        return True
+
     def forward(self, x, Vh, U, w, kind, base_out) -> Tuple[torch.Tensor, torch.Tensor]:
         Q = x @ Vh.T  # [N, r]
         Z = Q * w if kind == "diag" else Q @ w.T  # [N, r]

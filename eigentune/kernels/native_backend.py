@@ -48,6 +48,9 @@ class NativeBackend(TorchBackend):
         return (x.is_cuda and x.dtype in (torch.float16, torch.bfloat16, torch.float32) and 1 <= x.shape[0] <= MAX_TOKENS
                 and 1 <= rank <= MAX_RANK and x.shape[0] * rank <= MAX_ELEMS and x.shape[1] % vec == 0)
 
+    def supports_bwd(self, q: torch.Tensor, rank: int, kind: str) -> bool:
+        return q.is_cuda and q.dtype in (torch.float16, torch.bfloat16, torch.float32) and kind == "diag" and rank >= 1
+
     def forward(self, x, Vh, U, w, kind, base_out):
         x, base_out = x.contiguous(), base_out.contiguous()
         y, Q = _ext.forward(x, Vh.contiguous(), U.contiguous(), w.contiguous(), kind == "core", base_out)

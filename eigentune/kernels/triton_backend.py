@@ -144,6 +144,9 @@ class TritonBackend:
         limit = MAX_RANK_DIAG if kind == "diag" else MAX_RANK_CORE
         return x.is_cuda and x.dtype in _SUPPORTED and 1 <= rank <= limit and x.shape[0] > 0 and x.shape[1] > 0
 
+    def supports_bwd(self, q: torch.Tensor, rank: int, kind: str) -> bool:
+        return self.supports(q, rank, kind)
+
     def forward(self, x, Vh, U, w, kind, base_out):
         x = x if x.stride(1) == 1 else x.contiguous()
         Q = down(x, Vh, b_k_dim=1)                                  # [N, r] = X Vh^T

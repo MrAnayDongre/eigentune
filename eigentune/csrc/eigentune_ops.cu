@@ -174,11 +174,12 @@ std::vector<at::Tensor> forward(const at::Tensor& x, const at::Tensor& vh, const
   ET_DISPATCH(x.scalar_type(), "eigentune_forward", [&] {
     constexpr int V = 16 / sizeof(scalar_t);
     TORCH_CHECK(K % V == 0, "eigentune native: in_features must be a multiple of ", V);
-    const int warps = kBlock / 32;
+    const int wsz = at::cuda::warp_size();  // 32 on NVIDIA, 32 or 64 on AMD
+    const int warps = kBlock / wsz;
     const int blocks_x = (N * R + warps - 1) / warps;
     // enough blocks to fill the GPU, but never a slice shorter than one warp-iteration
     const int sms = at::cuda::getCurrentDeviceProperties()->multiProcessorCount;
-    int S = std::max(1, std::min((4 * sms + blocks_x - 1) / blocks_x, K / (32 * V)));
+    int S = std::max(1, std::min((4 * sms + blocks_x - 1) / blocks_x, K / (wsz * V)));
     const int slice = ((K + S - 1) / S + V - 1) / V * V;
     S = (K + slice - 1) / slice;
     auto part = at::empty({S, N, R}, x.options().dtype(at::kFloat));

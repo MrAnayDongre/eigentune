@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from .dispatch import get_backend, select_backend
+from .dispatch import select_backend
 
 
 class _EigenTuneFunction(torch.autograd.Function):
@@ -13,14 +13,15 @@ class _EigenTuneFunction(torch.autograd.Function):
         b = select_backend(backend, x, w.shape[0], kind)
         y, Q = b.forward(x, Vh, U, w, kind, base_out)
         ctx.save_for_backward(Q, Vh, U, w)
-        ctx.kind, ctx.backend_name = kind, b.name
+        ctx.kind, ctx.requested = kind, backend
         return y
 
     @staticmethod
     def backward(ctx, g):
         Q, Vh, U, w = ctx.saved_tensors
         g = g.contiguous()
-        gx, gw = get_backend(ctx.backend_name).backward(g, Q, Vh, U, w, ctx.kind, ctx.needs_input_grad[0])
+        b = select_backend(ctx.requested, Q, Q.shape[1], ctx.kind, "bwd")
+        gx, gw = b.backward(g, Q, Vh, U, w, ctx.kind, ctx.needs_input_grad[0])
         return gx, (g if ctx.needs_input_grad[1] else None), None, None, gw.to(w.dtype), None, None
 
 
