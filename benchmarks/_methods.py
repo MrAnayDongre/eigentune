@@ -11,7 +11,15 @@ import torch
 from eigentune import EigenTuneConfig, adapter_report, get_eigentune_model, save_adapter
 
 TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-PEFT_METHODS = ["lora", "rslora", "dora", "pissa", "olora", "lora_plus", "lora_fa"]
+PEFT_METHODS = [
+    "lora",
+    "rslora",
+    "dora",
+    "pissa",
+    "olora",
+    "lora_plus",
+    "lora_fa",
+]  # lora_fa/olora: supported, not in the default comparison
 EIGEN_METHODS = [
     "eigentune_diag",
     "eigentune_core",

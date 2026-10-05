@@ -1,16 +1,20 @@
-"""Orchestrate the quality comparison: a learning-rate sweep per method (seed 0), then extra seeds at the best rate.
+"""Orchestrate the quality comparison.
 
-    python benchmarks/compare_peft.py sweep      # phase 1, resumable
-    python benchmarks/compare_peft.py seeds      # phase 2: seeds 1,2 at each config's best learning rate
-    python benchmarks/compare_peft.py ablate     # one-seed ablations (selection, update)
+    python benchmarks/compare_peft.py search     # adaptive learning-rate search per method, seed 0
+    python benchmarks/compare_peft.py seeds      # extra seeds at each config's best learning rate
+    python benchmarks/compare_peft.py ablate     # one-seed ablations (selection, update rule)
     python benchmarks/compare_peft.py report     # markdown + JSON summary
 
-One process at a time, with a cool-down between runs: this machine's GPU also drives the display.
+The learning-rate search starts from a prior triple and keeps extending by 3x toward whichever edge holds the best
+value, up to ``MAX_EVALS`` runs, so no method is judged on a grid that stops short of its optimum. Resumable; one
+process at a time (``quality.py`` also runs a thermal governor: this machine's CPU and GPU share one cooling envelope).
 """
 
 from __future__ import annotations
 
+import glob
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -21,168 +25,143 @@ from pathlib import Path
 HERE = Path(__file__).parent
 OUT = HERE / "results" / "quality"
 PY = sys.executable
-MAX_GPU_TEMP = 62
-MAX_CPU_TEMP = 82
+STEPS = 150
+MAX_EVALS = 5
 
-EIGEN_DIAG = [3e-3, 1e-2, 3e-2]
-EIGEN_CORE = [1e-3, 3e-3, 1e-2]
-LORA = [1e-4, 3e-4, 1e-3]
-# (method, rank, learning-rate grid)
-GRID = [
-    ("eigentune_diag", 16, EIGEN_DIAG),
-    ("eigentune_core", 8, EIGEN_CORE),
-    ("lora", 8, LORA),
-    ("lora", 1, LORA),
-    ("eigentune_diag", 64, EIGEN_DIAG),
-    ("eigentune_core", 16, EIGEN_CORE),
-    ("dora", 8, LORA),
-    ("pissa", 8, [3e-5, 1e-4, 3e-4]),
-    ("rslora", 8, LORA),
-    ("lora_plus", 8, [5e-5, 1.5e-4, 5e-4]),
-    ("lora_fa", 8, LORA),
+# (method, rank, starting learning rates)
+CONFIGS = [
+    ("eigentune_diag", 16, [1e-2, 3e-2, 1e-1]),
+    ("eigentune_core", 8, [1e-2, 3e-2, 1e-1]),
+    ("lora", 8, [3e-4, 1e-3, 3e-3]),
+    ("lora", 1, [1e-3, 3e-3, 1e-2]),
+    ("eigentune_diag", 64, [1e-2, 3e-2, 1e-1]),
+    ("eigentune_core", 16, [1e-2, 3e-2, 1e-1]),
+    ("dora", 8, [3e-4, 1e-3, 3e-3]),
+    ("pissa", 8, [1e-4, 3e-4, 1e-3]),
+    ("rslora", 8, [1e-4, 3e-4, 1e-3]),
+    ("lora_plus", 8, [1.5e-4, 5e-4, 1.5e-3]),
 ]
-# Ablations: one seed, two learning rates each (reported as single-seed).
-ABLATIONS = [
-    ("eigentune_diag_minor", 16, [1e-2, 3e-2]),
-    ("eigentune_core_minor", 8, [3e-3, 1e-2]),
-    ("eigentune_diag_relative", 16, [1e-3, 3e-3]),
+ABLATIONS = [  # (method, rank, the configuration whose best learning rate to scale from, multipliers)
+    ("eigentune_diag_minor", 16, ("eigentune_diag", 16), [1.0]),
+    ("eigentune_core_minor", 8, ("eigentune_core", 8), [1.0]),
+    ("eigentune_diag_relative", 16, ("eigentune_diag", 16), [0.3, 0.1]),
 ]
-
-
-def gpu_temp() -> int:
-    try:
-        return int(
-            subprocess.check_output(
-                ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader"], text=True
-            ).split()[0]
-        )
-    except Exception:
-        return 0
-
-
-def cpu_temp() -> int:
-    try:
-        out = subprocess.check_output(["sensors"], text=True)
-        return int(
-            float(
-                next(line for line in out.splitlines() if line.startswith("Package id 0"))
-                .split("+")[1]
-                .split("\N{DEGREE SIGN}")[0]
-            )
-        )
-    except Exception:
-        return 0
-
-
-def cooldown(max_wait: int = 900):
-    """Wait until both the GPU and the CPU package are cool: this laptop shares one thermal envelope."""
-    waited = 0
-    while (gpu_temp() > MAX_GPU_TEMP or cpu_temp() > MAX_CPU_TEMP) and waited < max_wait:
-        time.sleep(20)
-        waited += 20
 
 
 def path(method, rank, lr, seed) -> Path:
     return OUT / f"{method}_r{rank}_lr{lr:g}_s{seed}.json"
 
 
-def run_one(method, rank, lr, seed, steps=250):
+def run_one(method, rank, lr, seed):
     p = path(method, rank, lr, seed)
-    if p.exists():
-        return json.loads(p.read_text())
-    cooldown()
-    env = dict(
-        os.environ,
-        HF_HUB_OFFLINE="1",
-        HF_DATASETS_OFFLINE="1",
-        PYTHONPATH=str(HERE.parent),
-        OMP_NUM_THREADS="4",
-        MKL_NUM_THREADS="4",
-        TOKENIZERS_PARALLELISM="false",
-    )
-    cmd = [
-        PY,
-        str(HERE / "quality.py"),
-        "--method",
-        method,
-        "--rank",
-        str(rank),
-        "--lr",
-        str(lr),
-        "--seed",
-        str(seed),
-        "--steps",
-        str(steps),
-        "--out",
-        str(p),
-    ]
-    t = time.time()
-    try:
-        subprocess.run(cmd, env=env, timeout=1200, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as exc:
-        print(f"FAILED {p.name}: {exc.stderr[-300:]}", flush=True)
-        return None
-    except subprocess.TimeoutExpired:
-        print(f"TIMEOUT {p.name}", flush=True)
-        return None
-    r = json.loads(p.read_text())
-    print(
-        f"{p.name}: eval={r.get('final_eval_loss')} diverged={r.get('diverged')} ({time.time() - t:.0f}s, "
-        f"gpu {gpu_temp()}C cpu {cpu_temp()}C)",
-        flush=True,
-    )
-    return r
+    if not p.exists():
+        env = dict(
+            os.environ,
+            HF_HUB_OFFLINE="1",
+            HF_DATASETS_OFFLINE="1",
+            PYTHONPATH=str(HERE.parent),
+            OMP_NUM_THREADS="4",
+            MKL_NUM_THREADS="4",
+            TOKENIZERS_PARALLELISM="false",
+        )
+        cmd = [
+            PY,
+            str(HERE / "quality.py"),
+            "--method",
+            method,
+            "--rank",
+            str(rank),
+            "--lr",
+            str(lr),
+            "--seed",
+            str(seed),
+            "--steps",
+            str(STEPS),
+            "--out",
+            str(p),
+        ]
+        t = time.time()
+        try:
+            subprocess.run(cmd, env=env, timeout=3600, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            print(f"FAILED {p.name}: {exc.stderr[-300:]}", flush=True)
+            return None
+        except subprocess.TimeoutExpired:
+            print(f"TIMEOUT {p.name}", flush=True)
+            return None
+        print(f"{p.name}: done in {time.time() - t:.0f}s", flush=True)
+    return json.loads(p.read_text())
 
 
-def best_lr(method, rank, grid):
-    runs = [(path(method, rank, lr, 0), lr) for lr in grid if path(method, rank, lr, 0).exists()]
-    scored = []
-    for p, lr in runs:
-        r = json.loads(p.read_text())
-        if not r.get("diverged"):
-            scored.append((r["final_eval_loss"], lr))
-    return min(scored)[1] if scored else None
+def score(r):
+    return math.inf if r is None or r.get("diverged") else r["final_eval_loss"]
 
 
-def cmd_sweep():
-    for method, rank, grid in GRID:
-        for lr in grid:
-            run_one(method, rank, lr, 0)
+def seed0_runs(method, rank):
+    found = {}
+    for f in glob.glob(str(OUT / f"{method}_r{rank}_lr*_s0.json")):
+        r = json.loads(Path(f).read_text())
+        found[r["lr"]] = score(r)
+    return found
 
 
-def cmd_ablate():
-    for method, rank, grid in ABLATIONS:
-        for lr in grid:
-            run_one(method, rank, lr, 0)
+def best_lr(method, rank):
+    runs = {lr: s for lr, s in seed0_runs(method, rank).items() if s < math.inf}
+    return min(runs, key=runs.get) if runs else None
+
+
+def search(method, rank, start):
+    done = seed0_runs(method, rank)
+    queue = [lr for lr in start if lr not in done]
+    while True:
+        while queue:
+            lr = queue.pop(0)
+            r = run_one(method, rank, lr, 0)
+            done[lr] = score(r)
+        if len(done) >= MAX_EVALS:
+            return
+        lrs = sorted(done)
+        best = min(done, key=done.get)
+        if done[best] == math.inf:
+            queue = [lrs[0] / 3]  # everything diverged: go lower
+        elif best == lrs[-1]:
+            queue = [best * 3]
+        elif best == lrs[0]:
+            queue = [best / 3]
+        else:
+            return
+
+
+def cmd_search():
+    for method, rank, start in CONFIGS:
+        search(method, rank, start)
 
 
 def cmd_seeds():
-    for method, rank, grid in GRID:
-        lr = best_lr(method, rank, grid)
-        if lr is None:
+    for method, rank, _ in CONFIGS:
+        lr = best_lr(method, rank)
+        if lr is not None:
+            run_one(method, rank, lr, 1)
+
+
+def cmd_ablate():
+    for method, rank, (ref_m, ref_r), mults in ABLATIONS:
+        ref = best_lr(ref_m, ref_r)
+        if ref is None:
             continue
-        for seed in (1, 2):
-            run_one(method, rank, lr, seed)
+        for m in mults:
+            run_one(method, rank, float(f"{ref * m:.3g}"), 0)
 
 
 def summarize():
     rows = []
-    for method, rank, grid in GRID + ABLATIONS:
-        lr = best_lr(method, rank, grid)
+    for method, rank, _ in CONFIGS + [(a[0], a[1], None) for a in ABLATIONS]:
+        lr = best_lr(method, rank)
         if lr is None:
             continue
-        runs = [
-            json.loads(path(method, rank, lr, s).read_text()) for s in (0, 1, 2) if path(method, rank, lr, s).exists()
-        ]
+        runs = [json.loads(path(method, rank, lr, s).read_text()) for s in (0, 1) if path(method, rank, lr, s).exists()]
         runs = [r for r in runs if not r.get("diverged")]
-        if not runs:
-            continue
         losses = [r["final_eval_loss"] for r in runs]
-        sweep = {
-            lr_: json.loads(path(method, rank, lr_, 0).read_text())
-            for lr_ in grid
-            if path(method, rank, lr_, 0).exists()
-        }
         rows.append(
             {
                 "method": method,
@@ -200,7 +179,7 @@ def summarize():
                 "init_seconds": statistics.mean(r["init_seconds"] for r in runs),
                 "base_eval_loss_128": runs[0]["base_eval_loss_128"],
                 "sweep": {
-                    str(k): (v.get("final_eval_loss") if not v.get("diverged") else None) for k, v in sweep.items()
+                    f"{lr_:g}": (None if s == math.inf else s) for lr_, s in sorted(seed0_runs(method, rank).items())
                 },
                 "curves": [r["curve"] for r in runs],
             }
@@ -211,24 +190,12 @@ def summarize():
 def cmd_report():
     rows = summarize()
     (HERE / "results" / "quality_summary.json").write_text(json.dumps(rows, indent=2))
-    rows.sort(key=lambda r: r["eval_loss_mean"])
-    head = (
-        "| method | rank | trainable params | adapter bytes | adapter + bases | runtime bases | "
-        "eval loss (mean ± sd) | "
-        "steps/s | peak VRAM MiB | best lr | seeds |\n|---|---|---|---|---|---|---|---|---|---|---|"
-    )
-    lines = [head]
-    for r in rows:
-        lines.append(
-            f"| {r['method']} | {r['rank']} | {r['trainable_parameters']:,} | {r['adapter_bytes']:,} | "
-            f"{r['adapter_bytes_with_bases']:,} | {r['runtime_basis_bytes']:,} | "
-            f"{r['eval_loss_mean']:.4f} ± {r['eval_loss_std']:.4f} | {r['steps_per_second']:.2f} | "
-            f"{r['peak_vram_mib']:.0f} | {r['best_lr']:g} | {r['seeds']} |"
+    for r in sorted(rows, key=lambda r: r["eval_loss_mean"]):
+        print(
+            f"{r['method']:26s} r={r['rank']:<3d} params={r['trainable_parameters']:>9,}  eval={r['eval_loss_mean']:.4f} "
+            f"+- {r['eval_loss_std']:.4f}  lr={r['best_lr']:g}  seeds={r['seeds']}"
         )
-    text = "\n".join(lines)
-    (HERE / "results" / "quality_summary.md").write_text(text + "\n")
-    print(text)
 
 
 if __name__ == "__main__":
-    {"sweep": cmd_sweep, "seeds": cmd_seeds, "ablate": cmd_ablate, "report": cmd_report}[sys.argv[1]]()
+    {"search": cmd_search, "seeds": cmd_seeds, "ablate": cmd_ablate, "report": cmd_report}[sys.argv[1]]()
