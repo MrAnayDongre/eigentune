@@ -1,24 +1,23 @@
-# Copyright 2024 MrAnayDongre
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""EigenTune: parameter-efficient fine-tuning inside a model's pretrained singular subspaces."""
 
-# eigentune/__init__.py
-"""
-EigenTune: A PEFT method for surgical fine-tuning via singular value scaling.
-"""
+__version__ = "0.2.0.dev0"
 
+from .compat import EigenTunedLayer
 from .config import EigenTuneConfig
-from .layer import EigenTunedLayer
-from .model import get_eigentune_model
+from .layers import EigenTuneLinear
+from .model import adapter_report, get_eigentune_model, merge_adapter, print_trainable_parameters, unmerge_adapter
+from .serialization import AdapterMismatchError, load_adapter, save_adapter
 
-__version__ = "0.1.0"
+__all__ = [
+    "AdapterMismatchError",
+    "EigenTuneConfig",
+    "EigenTunedLayer",
+    "EigenTuneLinear",
+    "adapter_report",
+    "get_eigentune_model",
+    "load_adapter",
+    "merge_adapter",
+    "print_trainable_parameters",
+    "save_adapter",
+    "unmerge_adapter",
+]

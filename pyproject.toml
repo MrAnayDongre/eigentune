@@ -1,13 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "eigentune"
-version = "0.1.0"
-authors = [
-  { name="MrAnayDongre", email="dongreana@gmail.com" },
-]
-description = "EigenTune: An extremely parameter-efficient fine-tuning method via singular value scaling."
+dynamic = ["version"]
+description = "Parameter-efficient fine-tuning inside a model's pretrained singular subspaces, with optional Triton and CUDA kernels."
 readme = "README.md"
-license = { file="LICENSE" }
-requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Anay Dongre", email = "dongreanay@gmail.com" }]
+requires-python = ">=3.9"
+keywords = ["peft", "fine-tuning", "svd", "lora", "llm", "pytorch"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
@@ -15,13 +18,36 @@ classifiers = [
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-    "torch>=2.0.0",
-    "peft>=0.8.0",
-]
+dependencies = ["torch>=2.1", "safetensors>=0.4"]
+
+[project.optional-dependencies]
+triton = ["triton>=3.0"]
+transformers = ["transformers>=4.40"]
+dev = ["pytest>=7", "ruff", "build", "twine", "transformers>=4.40"]
 
 [project.urls]
-"Homepage" = "https://github.com/MrAnayDongre/eigentune"
+Homepage = "https://github.com/MrAnayDongre/eigentune"
 "Bug Tracker" = "https://github.com/MrAnayDongre/eigentune/issues"
+Changelog = "https://github.com/MrAnayDongre/eigentune/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "eigentune.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["eigentune*"]
+
+[tool.setuptools.package-data]
+eigentune = ["csrc/*.cu", "csrc/*.cpp", "csrc/*.h"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["cuda: needs an NVIDIA GPU", "rocm: needs an AMD GPU (ROCm build of PyTorch)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["UP006", "UP007", "UP035", "UP045"]  # typing generics kept for Python 3.9 at runtime

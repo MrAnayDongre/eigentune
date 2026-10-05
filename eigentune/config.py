@@ -1,39 +1,73 @@
-# Copyright 2024 MrAnayDongre
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""Configuration for an EigenTune adapter."""
 
-# eigentune/config.py
+from __future__ import annotations
 
-from typing import List, Optional
+from dataclasses import asdict, dataclass, field, fields
+from typing import Any, Dict, List, Optional, Union
 
+FORMAT_VERSION = 1
+
+METHODS = ("diagonal", "spectral_core")
+SELECTIONS = ("principal", "minor", "mixed")
+UPDATES = ("additive", "relative")
+SVD_BACKENDS = ("auto", "exact", "randomized", "lowrank")
+BACKENDS = ("auto", "torch", "triton", "native")
+
+
+@dataclass
 class EigenTuneConfig:
-    """
-    Configuration class for an EigenTune model.
+    """What to adapt and how.
 
-    This class holds all the configuration parameters for applying EigenTune.
+    Classic EigenTune (``method="diagonal"``) trains one scalar per selected singular direction:
+    ``W' = W + U_r diag(delta) V_r^T``.
 
-    Args:
-        rank (int, optional): The rank of the singular value decomposition update.
-            This is the number of top singular values to be fine-tuned.
-            Defaults to 4.
-        target_modules (list[str] | None, optional): The list of module names
-            or substrings to apply EigenTune to (e.g., ["q_proj", "v_proj"]).
-            If None, all linear layers are targeted. Defaults to None.
+    ``method="spectral_core"`` trains an ``r x r`` matrix ``C`` between the same frozen bases:
+    ``W' = W + U_r C V_r^T``. ``core_bandwidth`` restricts ``C`` to a band around the diagonal
+    (``0`` is classic EigenTune, ``None`` is a dense core).
+
+    Both start at zero, so the adapted model is identical to the base model at step 0.
     """
-    def __init__(
-        self,
-        rank: int = 4,
-        target_modules: Optional[List[str]] = None,
-    ):
-        self.rank = rank
-        self.target_modules = target_modules
+
+    rank: int = 8
+    target_modules: Optional[Union[List[str], str]] = None
+    exclude_modules: List[str] = field(default_factory=lambda: ["lm_head"])
+    method: str = "diagonal"
+    core_bandwidth: Optional[int] = None
+    selection: str = "principal"
+    update: str = "additive"
+    svd_backend: str = "auto"
+    svd_oversampling: int = 8
+    svd_niter: int = 2
+    svd_seed: int = 0
+    backend: str = "auto"
+    cache_dir: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.rank < 1:
+            raise ValueError("rank must be >= 1")
+        for name, allowed in (
+            ("method", METHODS),
+            ("selection", SELECTIONS),
+            ("update", UPDATES),
+            ("svd_backend", SVD_BACKENDS),
+            ("backend", BACKENDS),
+        ):
+            if getattr(self, name) not in allowed:
+                raise ValueError(f"{name}={getattr(self, name)!r} is not one of {allowed}")
+        if self.core_bandwidth is not None and self.core_bandwidth < 0:
+            raise ValueError("core_bandwidth must be >= 0 or None")
+        if self.method == "diagonal" and self.core_bandwidth not in (None, 0):
+            raise ValueError("core_bandwidth only applies to method='spectral_core'")
+
+    @property
+    def kind(self) -> str:
+        """The compute shape of the update: a vector (``diag``) or a matrix (``core``)."""
+        return "diag" if self.method == "diagonal" or self.core_bandwidth == 0 else "core"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> EigenTuneConfig:
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})

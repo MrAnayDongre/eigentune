@@ -6,23 +6,22 @@ This script demonstrates loading the 4-bit base model and applying the
 trained EigenTune adapter on top for efficient inference.
 """
 
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-from peft import PeftModel, LoraConfig
-
 import sys
-sys.path.append('.')
+
+import torch
+from peft import LoraConfig, PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+sys.path.append(".")
 from eigentune import replace_peft_with_eigentune
+
 
 def main():
     # --- 1. Configuration ---
     base_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     adapter_path = "./dolly-eigentuned-adapter"  # Path to your trained adapter
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.bfloat16
-    )
+    quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
 
     # --- 2. Model Loading ---
     print("Loading 4-bit quantized model to GPU...")
@@ -48,7 +47,7 @@ def main():
     model = replace_peft_with_eigentune(
         model,
         rank=lora_config.r,  # Use rank from the saved config
-        full_precision_state_dict=full_precision_state_dict
+        full_precision_state_dict=full_precision_state_dict,
     )
 
     # --- 4. Loading the Trained Adapter Weights ---
@@ -67,25 +66,20 @@ def main():
         "### Instruction:\n{instruction}\n\n### Response:"
     )
     prompt = prompt_template.format(instruction=test_instruction)
-    
+
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    
-    print(f"\n--- Generating Response ---")
+
+    print("\n--- Generating Response ---")
     print(f"Prompt:\n{prompt}")
-    
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=100,
-        do_sample=True,
-        top_p=0.9,
-        temperature=0.7
-    )
-    
+
+    outputs = model.generate(**inputs, max_new_tokens=100, do_sample=True, top_p=0.9, temperature=0.7)
+
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     # Clean up the response to only show the generated part
     response = response.split("### Response:")[1].strip()
-    
+
     print(f"\nModel Response:\n{response}")
+
 
 if __name__ == "__main__":
     main()
