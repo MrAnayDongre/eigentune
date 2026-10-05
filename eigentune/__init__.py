@@ -1,6 +1,6 @@
 """EigenTune: parameter-efficient fine-tuning inside a model's pretrained singular subspaces."""
 
-__version__ = "0.2.0.dev0"
+__version__ = "0.2.0"
 
 from .compat import EigenTunedLayer
 from .config import EigenTuneConfig

@@ -2,7 +2,7 @@
 
 All notable changes. Versions before 1.0 may change interfaces between minor releases.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-10-05)
 
 ### New
 - `method="spectral_core"`: an `r x r` core between the frozen singular bases, optionally banded (`core_bandwidth`).
