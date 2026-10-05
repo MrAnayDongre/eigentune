@@ -24,3 +24,10 @@ try:  # the Triton backend is optional: CPU-only installs never import it
     register_backend(_TritonBackend())
 except ImportError:
     pass
+
+try:  # the native backend only registers itself; the extension is built on first use
+    from .native_backend import NativeBackend as _NativeBackend
+
+    register_backend(_NativeBackend())
+except ImportError:
+    pass
