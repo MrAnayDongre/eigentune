@@ -7,6 +7,7 @@ recomputed from the same weight is the same basis.
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import os
@@ -130,7 +131,8 @@ def fingerprint(weight: torch.Tensor, cfg: EigenTuneConfig, backend: str) -> str
             sort_keys=True,
         ).encode()
     )
-    h.update(weight.detach().contiguous().view(torch.uint8).cpu().numpy().tobytes())
+    raw = weight.detach().contiguous().cpu()  # raw bytes without NumPy, which is not a dependency
+    h.update(ctypes.string_at(raw.data_ptr(), raw.numel() * raw.element_size()))
     return h.hexdigest()
 
 

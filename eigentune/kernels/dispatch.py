@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict, List, Protocol
 
 import torch
@@ -18,6 +19,8 @@ class Backend(Protocol):
 
 
 _REGISTRY: Dict[str, Backend] = {}
+_OPTIONAL = {"triton", "native"}  # accelerators that are legitimately absent on some installs
+_warned: set = set()
 
 
 def register_backend(backend: Backend) -> None:
@@ -55,5 +58,12 @@ def select_backend(requested: str, x: torch.Tensor, rank: int, kind: str, phase:
             if b is not None and _ok(b, x, rank, kind, phase):
                 return b
         return _REGISTRY["torch"]
-    b = get_backend(requested)
+    b = _REGISTRY.get(requested)
+    if b is None:
+        if requested not in _OPTIONAL:
+            get_backend(requested)  # raises the "unknown backend" error for typos
+        if requested not in _warned:
+            _warned.add(requested)
+            warnings.warn(f"backend {requested!r} is not available in this installation; using 'torch'", stacklevel=3)
+        return _REGISTRY["torch"]
     return b if _ok(b, x, rank, kind, phase) else _REGISTRY["torch"]

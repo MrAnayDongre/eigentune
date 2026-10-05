@@ -22,7 +22,26 @@ def test_cpu_auto_is_torch():
 @pytest.mark.parametrize("name", ["triton", "native"])
 def test_named_backend_that_cannot_run_falls_back_to_torch(name):
     # CPU tensors: no accelerator can run this, so the call must still succeed through the reference
-    assert select_backend(name, torch.randn(4, 16), 4, "diag").name == "torch"
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # a missing optional backend warns once; that is fine here
+        assert select_backend(name, torch.randn(4, 16), 4, "diag").name == "torch"
+
+
+def test_missing_optional_backend_warns_once_and_a_typo_still_raises():
+    import eigentune.kernels.dispatch as d
+
+    saved = d._REGISTRY.pop("triton", None)
+    d._warned.discard("triton")
+    try:
+        with pytest.warns(UserWarning, match="not available"):
+            assert select_backend("triton", torch.randn(2, 8), 2, "diag").name == "torch"
+        with pytest.raises(ValueError, match="unknown backend"):
+            select_backend("tirton", torch.randn(2, 8), 2, "diag")
+    finally:
+        if saved is not None:
+            d._REGISTRY["triton"] = saved
 
 
 def test_third_party_backend_can_register_and_is_selectable():

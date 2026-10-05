@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parents[2] / "eigentune" / "csrc" / "eigentune_ops.cu"
+import eigentune
+
+SRC = Path(eigentune.__file__).resolve().parent / "csrc" / "eigentune_ops.cu"  # the installed (or source) package
 
 
 def test_no_hardcoded_nvidia_warp_assumptions():
